@@ -1,0 +1,5193 @@
+---
+title: "R Notebook"
+output: html_notebook
+---
+
+This is an [R Markdown](http://rmarkdown.rstudio.com) Notebook. When you execute code within the notebook, the results appear beneath the code. 
+
+Try executing this chunk by clicking the *Run* button within the chunk or by placing your cursor inside it and pressing *Ctrl+Shift+Enter*. 
+
+```{r 加载包}
+###load packages
+library(ggplot2)
+library(cowplot)
+library(randomForest)
+#library(reprtree)
+library(repr)
+library(tree)
+library(party)
+library(ggpubr)
+library(Metrics)
+library(readr)
+library(tibble)
+library(readxl)
+library(missForest)
+library(missRanger)
+library(rfPermute)
+library(tidyverse)
+library(gghalves)
+library(ggridges)
+library(cols4all)
+library(ggplot2)
+library(gghalves)
+library(terra)
+library(tidyterra)
+library(cowplot)
+#library(reprtree)
+library(party)
+require(ggmap)
+require(maps)
+library(quantregForest)
+library(sf)
+library(ggspatial)
+library(RColorBrewer)
+library(ggtext)
+library(hrbrthemes)
+```
+
+
+```{r 数据}
+#
+RsForRandomForest<- read_csv("E:/data/14098967/Table 1 MGRsD.csv"
+              ,locale=locale(encoding="GBK"))
+#str(RsForRandomForest)
+RsForRandomForest %>% 
+  mutate(MYear = case_when(
+    Measure_Year <2000 ~ "Q",
+    Measure_Year >=2000 ~ "H",
+    TRUE ~ "Oth")) -> RsForRandomForest
+#RsForRandomForest$YearQ <- subset(RsForRandomForest, Measure_Year <2000 )
+#RsForRandomForest$YearH <- subset(RsForRandomForest, Measure_Year >=2000 )
+RsForRandomForest$Measure_Year <- as.factor(RsForRandomForest$Measure_Year)
+RsForRandomForest$Measure_Month <- as.factor(RsForRandomForest$Measure_Month)
+RsForRandomForest$Climate_Koeppon <- as.factor(RsForRandomForest$Climate_Koeppon)
+RsForRandomForest$TopClimatetype <- as.factor(RsForRandomForest$TopClimatetype)
+RsForRandomForest$IGBP <- as.factor(RsForRandomForest$IGBP)
+RsForRandomForest$Country <- as.factor(RsForRandomForest$Country)
+RsForRandomForest$SiteID <- as.factor(RsForRandomForest$SiteID)
+RsForRandomForest$MiddleClimate <- as.factor(RsForRandomForest$MiddleClimate)
+RsForRandomForest$IGBP_FromPaper <- as.factor(RsForRandomForest$IGBP_FromPaper)
+RsForRandomForest$Meas_Method <- as.factor(RsForRandomForest$Meas_Method)
+RsForRandomForest$MYear <- as.factor(RsForRandomForest$MYear)
+RsForRandomForest$absLat <- abs(RsForRandomForest$Latitude)
+RsForRandomForest$absLog <- abs(RsForRandomForest$Longitude)
+
+names(RsForRandomForest)[33] <- "Clay"
+names(RsForRandomForest)[34] <- "Sand"
+names(RsForRandomForest)[35] <- "Silt"
+names(RsForRandomForest)[30] <- "CN"
+
+
+
+RsForRandomForest <- subset(RsForRandomForest, select= -IGBP_FromPaper)
+RsForRandomForest <- subset(RsForRandomForest, select= -Meas_Method)
+RsForRandomForest <- subset(RsForRandomForest, select= -Country)
+RsForRandomForest <- subset(RsForRandomForest, select= -SiteID)
+RsForRandomForest_na <- subset(RsForRandomForest, !is.na(RsForRandomForest$N))
+RsForRandomForest_naOM <- subset(RsForRandomForest_na, !is.na(RsForRandomForest_na$Elevation))
+#RsForRandomForest_naOM <- subset(RsForRandomForest_naO, !is.na(RsForRandomForest_naO$Meas_Method))
+# 打印新的数据框
+#print(RsForRandomForest_naOM)
+
+Rs<- read_csv("E:/data/14098967/Table 1 MGRsD.csv",locale=locale(encoding="GBK"))
+MAT<-rast("E:/data/1901-2000/数据实体/world_koppen2.tif")
+#快速绘制下
+#绘图
+#coast <- ne_coastline(scale = "small", returnclass = "sf")
+p3<-ggplot() +
+  geom_spatraster(data=MAT)+
+  #修改配色，取消图例名称，并使NA值为透明
+  #scale_fill_gradient(low="#AD9E5F",high="#5E7987",na.value = 'transparent')+
+  scale_fill_viridis_c(option = "D",direction = -1,name='MAT(℃)',na.value = 'transparent')+
+  #取消拓展绘图边缘，否则y的坐标刻度不能显示
+  coord_sf(expand = FALSE)+ 
+  theme_minimal() + #geom_sf(data = coast)+ #更换主题
+  theme(legend.position="none",
+        legend.key.size = unit(0.4, "cm"),
+        panel.grid=element_blank(), 
+        #panel.border = element_rect(linetype = "solid", linewidth = 1,fill = NA)
+  )
+mp <- p3 + geom_point(data=Rs , aes(x=Longitude, y=Latitude),pch=21, bg = "#CDD1D370", col = "#00000080",size=2.5,stroke=.6,alpha  = 0.7)
+mp <-mp+theme(axis.text=element_text(size=12,face="bold", color="black"),
+         axis.title=element_text(size=12,face="bold"))
+mp
+
+
+
+Rs_naOMIT <- Rs[!duplicated(Rs$P_Annual),]
+#Rs_naOMIT
+
+library(plotbiomes) #加载plotbiomes包
+#whittaker_base_plot() #默认效果图
+Rs_naOMIT$P_Annual <- Rs_naOMIT$P_Annual/10
+p5<-whittaker_base_plot() +
+  #添加数据点，x为温度，y为降水
+  geom_point(data = Rs_naOMIT, 
+             aes(x = T_Annual, 
+                 y = P_Annual), 
+             size   = 3, #散点的大小
+             pch  = 21,
+             colour = "gray95", 
+             fill   = "black",
+             stroke = 1,
+             alpha  = 0.2) + #散点的透明度
+  scale_y_continuous(limits = c(0,450))+
+ # scale_x_continuous(limits = c(-20,30))+
+  theme(panel.grid=element_blank(),panel.border = element_rect(linetype = "solid", linewidth = 1,fill = NA))
+p5
+
+p1 <-ggplot() +
+  geom_point()+
+  geom_smooth(data=Rs_naOMIT, aes(x = Latitude, y =Rs_Norm ),method = "loess") +
+  coord_flip()+
+  theme_classic()+
+  geom_point()+scale_y_continuous(limits = c(0,4.5))
+  #coord_fixed(ratio = 1/2)
+p2<- p1
+##############
+#p3<- p2#+theme(axis.text=element_text(size=16,face="bold", color="black"),
+         #axis.title=element_text(size=16,face="bold"))
+#p3
+#library(patchwork)
+#mp+p4
+
+#df_tem <- Rs %>% group_by(Rs_Norm) %>% summarise(count = n())
+p4<-ggplot(Rs, aes(x = Rs_Norm)) +
+  geom_histogram(color = "black", fill = "#9E9E9E",linewidth = 1,) +
+  labs(x = expression(paste("Rs"," ","(",g," ","C"," ", m^-2," ", "day"^-1,")")))+
+   theme(legend.position="none",
+        legend.key.size = unit(0.4, "cm"),
+        panel.grid=element_blank(), 
+        panel.border = element_rect(linetype = "solid", linewidth = 1,fill = NA))
+p4
+
+library(patchwork)
+#mp/(p5|p4)
+```
+
+```{r 数据处理}
+set.seed (556)
+RsForRandomForest_naOMIT <- missRanger(RsForRandomForest_naOM)
+
+#print(RsForRandomForest_naOMIT)
+mean(RsForRandomForest_naOMIT$Rs_Norm,na.rm = T)
+#write.csv(RsForRandomForest_naOMIT, 'RsForRandomForest_naOMIT.csv')
+#plot(RsForRandomForest_naOMIT$TS,RsForRandomForest_naOMIT$Tm)
+plot(RsForRandomForest_naOMIT$Tm,RsForRandomForest_naOMIT$TS, #main = '训练集',
+     xlab = 'Tm', ylab = 'Ts',xlim=c(-30,50), ylim=c(-30,50),col = "#00000030",pch=19)
+abline(0, 1,lty = "dashed")
+z<-line(RsForRandomForest_naOMIT$TS,RsForRandomForest_naOMIT$Tm)
+abline(coef(z),lwd=2, lty = 1,xaxs="s")
+text(-18, 40, c("R=0.91,p<2.2e-16"),cex=1,font=2,col="#000000")
+
+RsForRandomForest_naOMIT %>% 
+  mutate(IBGP1 = case_when(
+    IGBP %in% c("CRO", "CVM") ~ "Cro",
+    IGBP %in% c("BSV", "OSH") ~ "Shr",
+    IGBP %in% c("DBF", "EBF", "ENF","MF") ~ "For",
+    #ClimateTypes %in% c() ~ "Cs",
+    #ClimateTypes %in% c("Cwa", "Cwb", "Cwc") ~ "Cw",
+    IGBP %in% c("GRA", "SAV", "WSA") ~ "Gra",
+    #ClimateTypes %in% c("Dsa", "Dsb", "Dsc", "Dwa", "Dwb", "Dwc", "Dwd") ~ "Dsw",
+    IGBP %in% c("SNO", "URB","WAT") ~ "Oth",
+    TRUE ~ "Oth")) -> RsForRandomForest_naOMIT
+
+A <- subset(RsForRandomForest_naOMIT, TopClimatetype == "A" )
+B <- subset(RsForRandomForest_naOMIT, TopClimatetype == "B" )
+C <- subset(RsForRandomForest_naOMIT, TopClimatetype == "C" )
+D <- subset(RsForRandomForest_naOMIT, TopClimatetype == "D" )
+E <- subset(RsForRandomForest_naOMIT, TopClimatetype == "E" )
+
+mean(A$Rs_Norm,na.rm = T)
+mean(B$Rs_Norm,na.rm = T)
+mean(C$Rs_Norm,na.rm = T)
+mean(D$Rs_Norm,na.rm = T)
+mean(E$Rs_Norm,na.rm = T)
+
+#write.csv(A$Rs_Norm, 'RSA.csv')
+#write.csv(B$Rs_Norm, 'RSB.csv')
+#write.csv(C$Rs_Norm, 'RSC.csv')
+#write.csv(D$Rs_Norm, 'RSD.csv')
+#write.csv(E$Rs_Norm, 'RSE.csv')
+RSA<- read_csv("E:/R/RSA.csv",locale=locale(encoding="GBK"))
+
+dtt <- RSA %>%
+  as_tibble(rownames = 'gene') %>%
+  gather(key = Climate_Koeppon,
+         value = exp,
+         -gene)
+dtt$Climate_Koeppon <- factor(dtt$Climate_Koeppon, levels = unique(dtt$Climate_Koeppon)) #转换为因子，固定绘图celltype顺序
+#head(dtt)
+
+c4a_gui()
+mycol1 <- c4a('10',6)
+mycol2 <- c4a('bold',6)
+
+#山脊图添加密度短竖线：
+
+p5 <- ggplot(data = dtt, aes(x = exp, y = Climate_Koeppon, fill = Climate_Koeppon)) +
+  geom_density_ridges(alpha = 0.8,
+                      color = 'white',
+                      rel_min_height = 0.01, #尾部修剪，数值越大修剪程度越高
+                      scale = 1.6, #山脊重叠程度调整，scale = 1时刚好触及基线，数值越大重叠度越高
+                      quantile_lines = TRUE, #显示分位数线
+                      quantiles = 2 #仅显示中位数线
+  ) +labs(x = expression(paste("Rs"," ","(",g," ","C"," ", m^-2," ", "day"^-1,")")), y = 'Climate_Koeppon')+scale_x_continuous(limits =c(-1,13))+
+  scale_fill_manual(values = mycol1) +theme_classic()
+p5<-p5 + annotate("text", x = 11 , y = 1.4,label = "n=1092",colour="black") + 
+  annotate("text", x = 11 , y = 2.4,label = "n=782",colour="black")+ 
+  annotate("text", x = 11 , y = 3.4,label = "n=7515",colour="black")+ 
+  annotate("text", x = 11 , y = 4.4,label = "n=3196",colour="black")+ 
+  annotate("text", x = 11 , y = 5.4,label = "n=126",colour="black") + theme(panel.grid =   element_blank())
+p5
+
+
+
+#A <- subset(RsForRandomForest_naOMIT, TopClimatetype == "A" )
+#B <- subset(RsForRandomForest_naOMIT, TopClimatetype == "B" )
+#C <- subset(RsForRandomForest_naOMIT, TopClimatetype == "C" )
+#D <- subset(RsForRandomForest_naOMIT, TopClimatetype == "D" )
+#E <- subset(RsForRandomForest_naOMIT, TopClimatetype == "E" )
+
+IA <- subset(RsForRandomForest_naOMIT, IBGP1 == "Cro" )
+IB <- subset(RsForRandomForest_naOMIT, IBGP1 == "Shr" )
+IC <- subset(RsForRandomForest_naOMIT, IBGP1 == "For" )
+ID <- subset(RsForRandomForest_naOMIT, IBGP1 == "Gra" )
+IE <- subset(RsForRandomForest_naOMIT, IBGP1 == "Oth" )
+
+mean(IA$Rs_Norm,na.rm = T)
+mean(IB$Rs_Norm,na.rm = T)
+mean(IC$Rs_Norm,na.rm = T)
+mean(ID$Rs_Norm,na.rm = T)
+mean(IE$Rs_Norm,na.rm = T)
+
+#write.csv(IA$Rs_Norm, 'RSIA.csv')
+#write.csv(IB$Rs_Norm, 'RSIB.csv')
+#write.csv(IC$Rs_Norm, 'RSIC.csv')
+#write.csv(ID$Rs_Norm, 'RSID.csv')
+#write.csv(IE$Rs_Norm, 'RSIE.csv')
+RSIA<- read_csv("E:/R/RSIA.csv",locale=locale(encoding="GBK"))
+
+dttI <- RSIA %>%
+  as_tibble(rownames = 'gene') %>%
+  gather(key = LandCover,
+         value = exp,
+         -gene)
+dttI$LandCover <- factor(dttI$LandCover, levels = unique(dttI$LandCover)) #转换为因子，固定绘图celltype顺序
+#head(dtt)
+
+c4a_gui()
+mycol1 <- c4a('10',6)
+mycol2 <- c4a('bold',6)
+
+#山脊图添加密度短竖线：
+
+p6 <- ggplot(data = dttI, aes(x = exp, y = LandCover, fill = LandCover)) +
+  geom_density_ridges(alpha = 0.8,
+                      color = 'white',
+                      rel_min_height = 0.01, #尾部修剪，数值越大修剪程度越高
+                      scale = 1.6, #山脊重叠程度调整，scale = 1时刚好触及基线，数值越大重叠度越高
+                      quantile_lines = TRUE, #显示分位数线
+                      quantiles = 2, #仅显示中位数线
+                      na.rm=TRUE
+  ) +labs(x = expression(paste("Rs"," ","(",g," ","C"," ", m^-2," ", "day"^-1,")")), y = 'LandCover')+scale_x_continuous(limits =c(-1,13))+
+  scale_fill_manual(values = mycol1) +
+  theme_classic()
+p6<-p6 + annotate("text", x = 10 , y = 1.4,label = "n=4065",colour="black") + 
+  annotate("text", x = 10 , y = 2.4,label = "n=468",colour="black")+ 
+  annotate("text", x = 10 , y = 3.4,label = "n=5387",colour="black")+ 
+  annotate("text", x = 10 , y = 4.4,label = "n=2446",colour="black")+ 
+  annotate("text", x = 10 , y = 5.4,label = "n=345",colour="black") + theme(panel.grid =   element_blank())
+p6
+
+YQ <- subset(RsForRandomForest_naOMIT, MYear == "Q" )
+YH <- subset(RsForRandomForest_naOMIT, MYear == "H" )
+
+mean(YQ$Rs_Norm,na.rm = T)
+mean(YH$Rs_Norm,na.rm = T)
+
+#write.csv(YQ$Rs_Norm, 'YQ.csv')
+#write.csv(YH$Rs_Norm, 'YH.csv')
+
+RSY<- read_csv("E:/R/YH.csv",locale=locale(encoding="GBK"))
+
+dttY <- RSY %>%
+  as_tibble(rownames = 'gene') %>%
+  gather(key = Year,
+         value = exp,
+         -gene)
+dttY$Year <- factor(dttY$Year, levels = unique(dttY$Year)) #转换为因子，固定绘图celltype顺序
+#head(dtt)
+
+c4a_gui()
+mycol1 <- c4a('10',6)
+mycol2 <- c4a('bold',6)
+
+#山脊图添加密度短竖线：
+
+p7 <- ggplot(data = dttY, aes(x = exp, y = Year, fill = Year)) +
+  geom_density_ridges(alpha = 0.8,
+                      color = 'white',
+                      rel_min_height = 0.01, #尾部修剪，数值越大修剪程度越高
+                      scale = 1.6, #山脊重叠程度调整，scale = 1时刚好触及基线，数值越大重叠度越高
+                      quantile_lines = TRUE, #显示分位数线
+                      quantiles = 2, #仅显示中位数线
+                      na.rm=TRUE
+  ) +labs(x = expression(paste("Rs"," ","(",g," ","C"," ", m^-2," ", "day"^-1,")")), y = 'Year of data')+scale_x_continuous(limits =c(-1,13))+
+  scale_fill_manual(values = mycol1) +
+  theme_classic()
+p7<-p7 + annotate("text", x = 10 , y = 1.4,label = "n=9060",colour="black") + 
+  annotate("text", x = 10 , y = 2.4,label = "n=3651",colour="black")+ 
+   theme(panel.grid =   element_blank())
+p7
+
+RsForRandomForest_naOMITL <- subset(RsForRandomForest_naOMIT, RsForRandomForest_naOMIT$Elevation < 500 )
+RsForRandomForest_naOMITM <- subset(RsForRandomForest_naOMIT, RsForRandomForest_naOMIT$Elevation >= 500 & RsForRandomForest_naOMIT$Elevation <1500 )
+RsForRandomForest_naOMITH <- subset(RsForRandomForest_naOMIT, RsForRandomForest_naOMIT$Elevation >1500 )
+RSE <- cbind(RsForRandomForest_naOMITL$Rs_Norm,RsForRandomForest_naOMITM$Rs_Norm,RsForRandomForest_naOMITM$Rs_Norm)
+
+mean(RsForRandomForest_naOMITL$Rs_Norm,na.rm = T)
+mean(RsForRandomForest_naOMITM$Rs_Norm,na.rm = T)
+mean(RsForRandomForest_naOMITH$Rs_Norm,na.rm = T)
+
+#write.csv(RSE, 'RSE.csv')
+RSE<- read_csv("E:/R/RSE.csv",locale=locale(encoding="GBK"))
+
+#names(RSE)[1] <- "Low"
+#names(RSE)[2] <- "Middle"
+#names(RSE)[3] <- "High"
+
+dttE <- RSE %>%
+  as_tibble(rownames = 'gene') %>%
+  gather(key = Elevation,
+         value = exp,
+         -gene)
+dttE$Elevation <- factor(dttE$Elevation, levels = unique(dttE$Elevation)) #转换为因子，固定绘图celltype顺序
+#head(dtt)
+
+c4a_gui()
+mycol1 <- c4a('10',6)
+mycol2 <- c4a('bold',6)
+
+#山脊图添加密度短竖线：
+
+p8 <- ggplot(data = dttE, aes(x = exp, y = Elevation, fill = Elevation)) +
+  geom_density_ridges(alpha = 0.8,
+                      color = 'white',
+                      rel_min_height = 0.01, #尾部修剪，数值越大修剪程度越高
+                      scale = 1.6, #山脊重叠程度调整，scale = 1时刚好触及基线，数值越大重叠度越高
+                      quantile_lines = TRUE, #显示分位数线
+                      quantiles = 2, #仅显示中位数线
+                      na.rm=TRUE
+  ) +labs(x = expression(paste("Rs"," ","(",g," ","C"," ", m^-2," ", "day"^-1,")")), y = 'Elevation')+scale_x_continuous(limits =c(-1,13))+
+  scale_fill_manual(values = mycol1) +
+  theme_classic()
+p8<-p8 + annotate("text", x = 10 , y = 1.4,label = "n=8634",colour="black") + 
+  annotate("text", x = 10 , y = 2.4,label = "n=3139",colour="black")+ 
+  annotate("text", x = 10 , y = 3.4,label = "n=938",colour="black")+ 
+  theme(panel.grid =   element_blank())
+p8
+
+
+#text(2, 10, expression(R^2==0.67),cex=1,font=2,col="#000000")
+#text(2, 9, expression(P<0.001),cex=1,font=2,col="#000000")
+```
+
+
+
+```{r}
+```
+
+
+```{r}
+```
+
+
+```{r 数据分类}
+
+
+
+#Randomly split the overall data into 70% for training, 30% for validating
+set.seed (556)
+train <- sample(2, nrow(RsForRandomForest_naOMIT), replace = TRUE, prob = c(0.7,0.3))
+TrainSet <- RsForRandomForest_naOMIT[train==1,] #To train the RF model
+ValidSet <- RsForRandomForest_naOMIT[train==2,] #To validate the RF model
+#summary(TrainSet)
+#summary(ValidSet)
+
+#set.seed (12345)
+#train <- createDataPartition(y = RsForRandomForest$Rs_Norm,
+#                             p =0.7,
+#                             list = F,
+#                             times = 1)
+#TrainSet <- RsForRandomForest[train,]
+#Traindata <- RsForRandomForest[train,]
+#ValidSet <- RsForRandomForest[-train,]
+
+
+mean(ValidSet$Rs_Norm,na.rm = T)
+
+
+#Split data into chambers from convergent areas 
+TrainSetIA <- subset(TrainSet, IBGP1 == "Cro" )
+TrainSetIB <- subset(TrainSet, IBGP1 == "Shr" )
+TrainSetIC <- subset(TrainSet, IBGP1 == "For" )
+TrainSetID <- subset(TrainSet, IBGP1 == "Gra" )
+TrainSetIE <- subset(TrainSet, IBGP1 == "Oth" )
+
+ValidSetIA <- subset(ValidSet, IBGP1 == "Cro" )
+ValidSetIB <- subset(ValidSet, IBGP1 == "Shr" )
+ValidSetIC <- subset(ValidSet, IBGP1 == "For" )
+ValidSetID <- subset(ValidSet, IBGP1 == "Gra" )
+ValidSetIE <- subset(ValidSet, IBGP1 == "Oth" )
+
+TrainSetA <- subset(TrainSet, TopClimatetype == "A" )
+TrainSetB <- subset(TrainSet, TopClimatetype == "B" )
+TrainSetC <- subset(TrainSet, TopClimatetype == "C" )
+TrainSetD <- subset(TrainSet, TopClimatetype == "D" )
+TrainSetE <- subset(TrainSet, TopClimatetype == "E" )
+
+ValidSetA <- subset(ValidSet, TopClimatetype == "A" )
+ValidSetB <- subset(ValidSet, TopClimatetype == "B" )
+ValidSetC <- subset(ValidSet, TopClimatetype == "C" )
+ValidSetD <- subset(ValidSet, TopClimatetype == "D" )
+ValidSetE <- subset(ValidSet, TopClimatetype == "E" )
+
+TrainSetYQ <- subset(TrainSet, MYear == "Q" )
+TrainSetYH <- subset(TrainSet, MYear == "H" )
+
+ValidSetYQ <- subset(ValidSet, MYear == "Q" )
+ValidSetYH <- subset(ValidSet, MYear == "H" )
+
+
+TrainSetL <- subset(TrainSet, TrainSet$Elevation<500 )
+TrainSetM <- subset(TrainSet, TrainSet$Elevation>=500 & TrainSet$Elevation<1500 )
+TrainSetH <- subset(TrainSet, TrainSet$Elevation>1500 )
+
+ValidSetL <- subset(ValidSet, ValidSet$Elevation<500 )
+ValidSetM <- subset(ValidSet, ValidSet$Elevation>=500 & ValidSet$Elevation<1500 )
+ValidSetH <- subset(ValidSet, ValidSet$Elevation>1500 )
+
+```
+
+
+
+
+```{r 构建全球模型}
+###Set seed to replicate random generation
+
+set.seed (556)
+#set.seed (12346)
+#Y <- TrainSet[,2]
+#X <-TrainSet[,c(4,6,7,16,17,18,20,23,24,25,26,27,28,29,30:36,39)]
+#X2<-TrainSet[,7]
+#X1 <- data.frame(X2)
+#Y1 <- data.frame(Y)
+
+#fit_rf11 <- quantregForest(x=X1,y=Y,keep.inbag=TRUE)
+
+
+fit_rf1 <- randomForest(Rs_Norm ~ P_LastMonth +  T_LastMonth + Measure_Month + TS + 
+                         Pm + Tm + Latitude #+Longitude# 
+                        +absLog 
+                       + Climate_Koeppon + IGBP + LAI + BD + BS + CN + CaCO3 + CEC + Clay                         + Sand + Elevation + Silt + N + OC + PH, data=TrainSet, 
+                       keep.inbag=TRUE, mtry=5, importance=TRUE, ntree=1000)
+
+#The summary of the Standard Random Forest model
+fit_rf1
+#Variable importance measures
+importance (fit_rf1,type=2)
+#Looking at the OOB error reduction with the tree size
+plot (fit_rf1) 
+#Plotting the variable importance
+varImpPlot(fit_rf1)
+
+
+
+
+#Generate predictions of validation data using Random Forest Model
+prediction1.validation <- predict(fit_rf1, ValidSet) #predict w/ validation 
+
+#Compare correlation b/w validation predictions and observations
+cor.test(prediction1.validation, ValidSet$Rs_Norm, method = "pearson", alpha=.05)
+
+Validation1 <- cbind(prediction1.validation, ValidSet)
+names(Validation1)[1] <- "Prediction"
+
+validation1.lm <- lm(Rs_Norm~Prediction, data=Validation1)
+summary(validation1.lm)
+
+
+#使用训练集，评估预测性能
+plant_predict1 <- predict(fit_rf1,TrainSet)
+
+plot(TrainSet$Rs_Norm, plant_predict1, main = '训练集',
+     xlab = 'Data of training', ylab = 'Predict',xlim=c(0,12), ylim=c(0,12))
+abline(0, 1)
+z<-line(TrainSet$Rs_Norm,plant_predict1)
+abline(coef(z),lwd=2, lty = 1,xaxs="s")
+text(2, 10, c("R=0.83,p<2.2e-16"),cex=1,font=2,col="#000000")
+
+# 计算均方根误差（RMSE）
+rmseT1 <- sqrt(mean((TrainSet$Rs_Norm - plant_predict1 )^2))
+rmseT1
+
+# 计算观测值数量
+n <- length(plant_predict1)
+
+# 计算每个观测值的差异，并求平方
+diff <- TrainSet$Rs_Norm - plant_predict1
+squared_diff <- diff^2
+
+# 计算MSE
+mse <- sum(squared_diff) / n
+
+# 打印结果
+print(mse)
+
+#使用测试集，评估预测性能
+plant_predict1 <- predict(fit_rf1, ValidSet)
+
+plot(ValidSet$Rs_Norm, plant_predict1, main = '测试集',
+     xlab = 'Data of validating', ylab = 'Predict', xlim=c(0,12), ylim=c(0,12))
+abline(0, 1)
+z<-line(ValidSet$Rs_Norm,plant_predict1)
+abline(coef(z),lwd=2, lty = 1,xaxs="s")
+text(2, 10, c("R=0.83,p<2.2e-16"),cex=1,font=2,col="#000000")
+
+rmseV1 <- sqrt(mean(( ValidSet$Rs_Norm - plant_predict1 )^2))
+rmseV1
+
+# 计算观测值数量
+n <- length(plant_predict1)
+
+# 计算每个观测值的差异，并求平方
+diff <- ValidSet$Rs_Norm - plant_predict1
+squared_diff <- diff^2
+
+# 计算MSE
+mse <- sum(squared_diff) / n
+
+# 打印结果
+print(mse)
+
+###ALL全球
+
+set.seed (556)
+
+fit_rf <- randomForest(Rs_Norm ~ P_LastMonth +  T_LastMonth + Measure_Month + #TS + 
+                         Pm + Tm + Latitude #+Longitude#
+                       + absLog 
+                       + Climate_Koeppon + IGBP + LAI + BD + BS + CN + CaCO3 + CEC + Clay                         + Sand + Elevation + Silt + N + OC + PH, data=TrainSet, 
+                       keep.inbag=TRUE, mtry=5, importance=TRUE, ntree=1000)
+
+
+
+#The summary of the Standard Random Forest model
+
+fit_rf
+
+#Variable importance measures
+importance (fit_rf)
+#Looking at the OOB error reduction with the tree size
+plot (fit_rf) 
+#Plotting the variable importance
+varImpPlot(fit_rf)
+
+##关键 OTUs 识别
+#查看表示每个变量（OTUs）重要性的得分
+
+#或者使用函数 importance()
+importance_otu <- data.frame(importance(fit_rf))
+#head(importance_otu)
+
+#可以根据某种重要性的高低排个序，例如根据“Mean Decrease Accuracy”指标
+importance_otu <- importance_otu[order(importance(fit_rf,type=1), decreasing = TRUE), ]
+#head(importance_otu)
+
+#输出表格
+write.csv(importance_otu, 'importance_otu.csv')
+ 
+#然后取出排名靠前的因素
+
+#提示保留 9-13 个重要的 OTU，可以使随机森林回归的精度最大化
+#首先根据某种重要性的高低排个序，例如根据“IncNodePurity”指标
+importance_otu <- importance_otu[order(importance(fit_rf,type=1), decreasing = TRUE), ]
+ 
+#然后取出排名靠前的 OTU，例如 top10 最重要的 OTU
+importance_otu.select <- importance_otu[1:10, ]
+importance_otu.select
+ 
+#输出表格
+#write.table(importance_otu.select, 'importance_otu.select.txt', sep = '\t', col.names = NA, quote = FALSE)
+ 
+#有关 OTU 的物种分类信息等其它细节，可后续自行补充
+otu_id.select <- rownames(importance_otu.select)
+otu.select <- TrainSet[ ,c(otu_id.select, 'Rs_Norm')]
+otu.select <- reshape2::melt(otu.select, id = 'Rs_Norm')
+ 
+ggplot(otu.select, aes(x = value, y = Rs_Norm)) +
+  geom_point() +
+  geom_smooth() +
+  facet_wrap(~variable, ncol = 3, scale = 'free_y') +
+  labs(title = '',x = 'Plant age (days)', y = 'Relative abundance')
+
+
+
+
+# 查看下这些重要的 vars 与Ozone的关系
+ggplot() +
+    geom_point() +
+    geom_smooth(data= TrainSet, aes(x =  Elevation, y = Rs_Norm),method = "loess") +
+    #facet_wrap(~variable, ncol = 2, scale = 'free_y') +
+    labs(title = '',x = ' Elevation', y = 'Rs_Norm')
+
+ggplot() +
+    geom_point() +
+    geom_smooth(data= TrainSet, aes(x =  P_LastMonth, y = Rs_Norm),method = "loess") +
+    #facet_wrap(~variable, ncol = 2, scale = 'free_y') +
+    labs(title = '',x = ' P_LastMonth', y = 'Rs_Norm')
+
+ggplot() +
+    geom_point(data= TrainSet,aes(x =  Measure_Month, y = Rs_Norm)) +
+    geom_smooth() +
+    #facet_wrap(~variable, ncol = 2, scale = 'free_y') +
+    labs(title = '',x = ' Measure_Month', y = 'Rs_Norm')
+
+ggplot() +
+    geom_point() +
+    geom_smooth(data= TrainSet, aes(x =  LAI, y = Rs_Norm),method = "loess") +
+    #facet_wrap(~variable, ncol = 2, scale = 'free_y') +
+    labs(title = '',x = ' LAI', y = 'Rs_Norm')
+#########Step 2: Evaluate the model
+#Generate predictions of validation data using Random Forest Model
+prediction.validation <- predict(fit_rf, ValidSet) #predict w/ validation 
+
+#Compare correlation b/w validation predictions and observations
+cor.test(prediction.validation, ValidSet$Rs_Norm, method = "spearman", alpha=.05)
+
+Validation <- cbind(prediction.validation, ValidSet)
+names(Validation)[1] <- "Prediction"
+
+validation.lm <- lm(Rs_Norm~Prediction, data=Validation)
+summary(validation.lm)
+
+mean(prediction.validation,na.rm = T)
+#write.csv(Validation, 'Validation.csv')
+
+#使用训练集，评估预测性能
+plant_predict <- predict(fit_rf,TrainSet)
+
+plot(TrainSet$Rs_Norm, plant_predict,
+     xlab = 'Data of training', ylab = 'Predict',xlim=c(0,12), ylim=c(0,12))
+abline(0, 1)
+z<-line(TrainSet$Rs_Norm,plant_predict)
+abline(coef(z),lwd=2, lty = 1,xaxs="s")
+text(2, 10, c("R=0.82,p<2.2e-16"),cex=1,font=2,col="#000000")
+
+mean(plant_predict,na.rm = T)
+
+rmseT <- sqrt(mean((TrainSet$Rs_Norm - plant_predict )^2))
+rmseT
+
+
+# 计算观测值数量
+n <- length(plant_predict)
+
+# 计算每个观测值的差异，并求平方
+diff <- TrainSet$Rs_Norm - plant_predict
+squared_diff <- diff^2
+
+# 计算MSE
+mse <- sum(squared_diff) / n
+
+# 打印结果
+print(mse)
+
+#使用测试集，评估预测性能
+plant_predict <- predict(fit_rf, ValidSet)
+
+plot(ValidSet$Rs_Norm, plant_predict, main = 'Single Global Model (SGM)',
+     xlab = 'Observated data', ylab = 'Predicted data ', xlim=c(0,12), ylim=c(0,12))
+abline(0, 1)
+z<-line(ValidSet$Rs_Norm,plant_predict)
+abline(coef(z),lwd=2, lty = 2,xaxs="s",col = "red")
+text(2, 10, expression(R^2==0.671),cex=1,font=2,col="#000000")
+text(2, 9, expression(P<0.001),cex=1,font=2,col="#000000")
+
+rmseV <- sqrt(mean((ValidSet$Rs_Norm - plant_predict )^2))
+rmseV
+# 计算观测值数量
+n <- length(plant_predict)
+
+# 计算每个观测值的差异，并求平方
+diff <- ValidSet$Rs_Norm - plant_predict
+squared_diff <- diff^2
+
+# 计算MSE
+mse <- sum(squared_diff) / n
+
+# 打印结果
+print(mse)
+
+mean(plant_predict,na.rm = T)
+
+e <- 1-((sum(squared_diff))/sum((ValidSet$Rs_Norm - mean(ValidSet$Rs_Norm))^2))
+e
+
+mre <- sum(plant_predict-ValidSet$Rs_Norm)/mean(ValidSet$Rs_Norm)/n
+mre
+
+
+```
+
+
+```{r}
+MSE <- numeric(22)  #mtry最多可以取到13因为有13个特征变量
+set.seed(556)
+for(i in 1:22){
+  fit <- randomForest(Rs_Norm ~ P_LastMonth +  T_LastMonth + Measure_Month + #TS + 
+                         Pm + Tm + Latitude #+Longitude#
+                       + absLog + Climate_Koeppon + IGBP + LAI + BD + BS + CN + CaCO3 + CEC + Clay                         +Sand + Elevation + Silt + N + OC + PH,data=RsForRandomForest_naOMIT
+                      ,subset=train, mtry=i)
+  MSE[i] <- mean(fit$mse[1000])
+}
+
+MSE
+# [1] 19.557467 12.717293 10.658755  9.903552 10.026058  9.815894
+
+
+min(MSE)
+which.min(MSE)   #找到哪个mtry值使得MSE最小
+plot(1:22,MSE,type="b",xlab = "mtry",main="OOB Errors")
+abline(v=which.min(MSE),lty=2)
+```
+
+
+```{r 构建气候带模型}
+
+########A数据的测试##
+
+set.seed (556)
+
+fit_rfA <- randomForest(Rs_Norm ~ P_LastMonth +  T_LastMonth + Measure_Month + #TS + 
+                         Pm + Tm + Latitude + absLog + Climate_Koeppon 
+                       + IGBP + LAI + BD + BS + CN + CaCO3 + CEC + Clay + Sand + 
+                         Elevation + Silt + N + OC + PH, data=TrainSetA, 
+                       keep.inbag=TRUE, mtry=5, importance=TRUE, ntree=1000)
+
+
+
+#The summary of the Standard Random Forest model
+fit_rfA
+#Variable importance measures
+importance (fit_rfA)
+#Looking at the OOB error reduction with the tree size
+plot (fit_rfA) 
+#Plotting the variable importance
+varImpPlot(fit_rfA)
+
+##关键 OTUs 识别
+#查看表示每个变量（OTUs）重要性的得分
+
+#或者使用函数 importance()
+importance_otuA <- data.frame(importance(fit_rfA))
+#head(importance_otu)
+
+#可以根据某种重要性的高低排个序，例如根据“Mean Decrease Accuracy”指标
+importance_otuA <- importance_otuA[order(importance(fit_rfA,type=1), decreasing = TRUE), ]
+#head(importance_otu)
+
+#输出表格
+write.csv(importance_otuA, 'importance_otuA.csv')
+
+#########Step 2: Evaluate the model
+#Generate predictions of validation data using Random Forest Model
+#######
+prediction.validationAA <- predict(fit_rfA, ValidSetA) #predict w/ validation 
+
+#Compare correlation b/w validation predictions and observations
+cor.test(prediction.validationAA, ValidSetA$Rs_Norm, method = "pearson", alpha=.05)
+
+ValidationAA <- cbind(prediction.validationAA, ValidSetA)
+names(ValidationAA)[1] <- "Prediction"
+
+validation.lmAA <- lm(Rs_Norm~Prediction, data=ValidationAA)
+summary(validation.lmAA)
+
+#########Step 3: All Factor Evaluate the model
+#Generate predictions of validation data using Random Forest Model
+prediction.validationA <- predict(fit_rf, ValidSetA) #predict w/ validation 
+
+#Compare correlation b/w validation predictions and observations
+cor.test(prediction.validationA, ValidSetA$Rs_Norm, method = "pearson", alpha=.05)
+
+ValidationA <- cbind(prediction.validationA, ValidSetA)
+names(ValidationA)[1] <- "Prediction"
+
+validation.lmA <- lm(Rs_Norm~Prediction, data=ValidationA)
+summary(validation.lmA)
+
+AIC(validation.lmAA, validation.lmA)
+
+#使用All数据集，评估预测性能
+RS_predictTA <- predict(fit_rf,ValidSetA)
+
+plot(ValidSetA$Rs_Norm, RS_predictTA,main = 'AA测试集',
+     xlab = 'Data of training', ylab = 'Predict',xlim=c(0,12), ylim=c(0,12))
+abline(0, 1)
+z<-line(ValidSetA$Rs_Norm,RS_predictTA)
+abline(coef(z),lwd=2, lty = 1,xaxs="s")
+text(2, 10, c("R=0.82,p<2.2e-16"),cex=1,font=2,col="#000000")
+
+rmseTA <- sqrt(mean((ValidSetA$Rs_Norm - RS_predictTA )^2))
+rmseTA
+# 计算观测值数量
+n <- length(RS_predictTA)
+
+# 计算每个观测值的差异，并求平方
+diff <- ValidSetA$Rs_Norm - RS_predictTA
+squared_diff <- diff^2
+
+# 计算MSE
+mse <- sum(squared_diff) / n
+
+# 打印结果
+print(mse)
+
+#使用测试集，评估预测性能
+RS_predictVA <- predict(fit_rfA, ValidSetA)
+
+plot(ValidSetA$Rs_Norm, RS_predictVA, main = 'A测试集',
+     xlab = 'Data of validating', ylab = 'Predict', xlim=c(0,12), ylim=c(0,12))
+abline(0, 1)
+z<-line(ValidSetA$Rs_Norm,RS_predictVA)
+abline(coef(z),lwd=2, lty = 1,xaxs="s")
+text(2, 10, c("R=0.82,p<2.2e-16"),cex=1,font=2,col="#000000")
+
+rmseVA <- sqrt(mean((ValidSetA$Rs_Norm - RS_predictVA )^2))
+rmseVA
+# 计算观测值数量
+n <- length(RS_predictVA)
+
+# 计算每个观测值的差异，并求平方
+diff <- ValidSetA$Rs_Norm - RS_predictVA
+squared_diff <- diff^2
+
+# 计算MSE
+mse <- sum(squared_diff) / n
+
+# 打印结果
+print(mse)
+####
+
+########B数据的测试##
+
+set.seed (556)
+
+fit_rfB <- randomForest(Rs_Norm ~ P_LastMonth +  T_LastMonth + Measure_Month + #TS + 
+                          Pm + Tm + Latitude + absLog + Climate_Koeppon 
+                        + IGBP + LAI + BD + BS + CN + CaCO3 + CEC + Clay + Sand + 
+                          Elevation + Silt + N + OC + PH, data=TrainSetB, 
+                        keep.inbag=TRUE, mtry=5, importance=TRUE, ntree=1000)
+
+
+
+#The summary of the Standard Random Forest model
+fit_rfB
+#Variable importance measures
+importance (fit_rfB)
+#Looking at the OOB error reduction with the tree size
+plot (fit_rfB) 
+#Plotting the variable importance
+varImpPlot(fit_rfB)
+
+##关键 OTUs 识别
+#查看表示每个变量（OTUs）重要性的得分
+
+#或者使用函数 importance()
+importance_otuB <- data.frame(importance(fit_rfB))
+#head(importance_otu)
+
+#可以根据某种重要性的高低排个序，例如根据“Mean Decrease Accuracy”指标
+importance_otuB <- importance_otuB[order(importance(fit_rfB,type=1), decreasing = TRUE), ]
+#head(importance_otu)
+
+#输出表格
+write.csv(importance_otuB, 'importance_otuB.csv')
+
+#########Step 2: Evaluate the model
+#Generate predictions of validation data using Random Forest Model
+#######
+prediction.validationBB <- predict(fit_rfB, ValidSetB) #predict w/ validation 
+
+#Compare correlation b/w validation predictions and observations
+cor.test(prediction.validationBB, ValidSetB$Rs_Norm, method = "pearson", alpha=.05)
+
+ValidationBB <- cbind(prediction.validationBB, ValidSetB)
+names(ValidationBB)[1] <- "Prediction"
+
+validation.lmBB <- lm(Rs_Norm~Prediction, data=ValidationBB)
+summary(validation.lmBB)
+
+#########Step 3: All Factor Evaluate the model
+#Generate predictions of validation data using Random Forest Model
+prediction.validationB <- predict(fit_rf, ValidSetB) #predict w/ validation 
+
+#Compare correlation b/w validation predictions and observations
+cor.test(prediction.validationB, ValidSetB$Rs_Norm, method = "pearson", alpha=.05)
+
+ValidationB <- cbind(prediction.validationB, ValidSetB)
+names(ValidationB)[1] <- "Prediction"
+
+validation.lmB <- lm(Rs_Norm~Prediction, data=ValidationB)
+summary(validation.lmB)
+
+AIC(validation.lmBB, validation.lmB)
+
+#使用All数据集，评估预测性能
+RS_predictTB <- predict(fit_rf,ValidSetB)
+
+plot(ValidSetB$Rs_Norm, RS_predictTB,main = 'AB测试集',
+     xlab = 'Data of training', ylab = 'Predict',xlim=c(0,12), ylim=c(0,12))
+abline(0, 1)
+z<-line(ValidSetB$Rs_Norm,RS_predictTB)
+abline(coef(z),lwd=2, lty = 1,xaxs="s")
+text(2, 10, c("R=0.82,p<2.2e-16"),cex=1,font=2,col="#000000")
+
+rmseTB <- sqrt(mean((ValidSetB$Rs_Norm - RS_predictTB )^2))
+rmseTB
+# 计算观测值数量
+n <- length(RS_predictTB)
+
+# 计算每个观测值的差异，并求平方
+diff <- ValidSetB$Rs_Norm - RS_predictTB
+squared_diff <- diff^2
+
+# 计算MSE
+mse <- sum(squared_diff) / n
+
+# 打印结果
+print(mse)
+
+#使用测试集，评估预测性能
+RS_predictVB <- predict(fit_rfB, ValidSetB)
+
+plot(ValidSetB$Rs_Norm, RS_predictVB, main = 'B测试集',
+     xlab = 'Data of validating', ylab = 'Predict', xlim=c(0,12), ylim=c(0,12))
+abline(0, 1)
+z<-line(ValidSetB$Rs_Norm,RS_predictVB)
+abline(coef(z),lwd=2, lty = 1,xaxs="s")
+text(2, 10, c("R=0.82,p<2.2e-16"),cex=1,font=2,col="#000000")
+
+rmseVB <- sqrt(mean((ValidSetB$Rs_Norm - RS_predictVB )^2))
+rmseVB
+# 计算观测值数量
+n <- length(RS_predictVB)
+
+# 计算每个观测值的差异，并求平方
+diff <- ValidSetB$Rs_Norm - RS_predictVB
+squared_diff <- diff^2
+
+# 计算MSE
+mse <- sum(squared_diff) / n
+
+# 打印结果
+print(mse)
+
+##########################
+
+########C数据的测试######
+
+set.seed (556)
+
+fit_rfC <- randomForest(Rs_Norm ~ P_LastMonth +  T_LastMonth + Measure_Month + #TS + 
+                          Pm + Tm + Latitude + absLog + Climate_Koeppon 
+                        + IGBP + LAI + BD + BS + CN + CaCO3 + CEC + Clay + Sand + 
+                          Elevation + Silt + N + OC + PH, data=TrainSetC, 
+                        keep.inbag=TRUE, mtry=5, importance=TRUE, ntree=1000)
+
+
+
+#The summary of the Standard Random Forest model
+fit_rfC
+#Variable importance measures
+importance (fit_rfC)
+#Looking at the OOB error reduction with the tree size
+plot (fit_rfC) 
+#Plotting the variable importance
+varImpPlot(fit_rfC)
+
+##关键 OTUs 识别
+#查看表示每个变量（OTUs）重要性的得分
+
+#或者使用函数 importance()
+importance_otuC <- data.frame(importance(fit_rfC))
+#head(importance_otu)
+
+#可以根据某种重要性的高低排个序，例如根据“Mean Decrease Accuracy”指标
+importance_otuC <- importance_otuC[order(importance(fit_rfC,type=1), decreasing = TRUE), ]
+#head(importance_otu)
+
+#输出表格
+write.csv(importance_otuC, 'importance_otuC.csv')
+
+#########Step 2: Evaluate the model
+#Generate predictions of validation data using Random Forest Model
+#######
+prediction.validationCC <- predict(fit_rfC, ValidSetC) #predict w/ validation 
+
+#Compare correlation b/w validation predictions and observations
+cor.test(prediction.validationCC, ValidSetC$Rs_Norm, method = "pearson", alpha=.05)
+
+ValidationCC <- cbind(prediction.validationCC, ValidSetC)
+names(ValidationCC)[1] <- "Prediction"
+
+validation.lmCC <- lm(Rs_Norm~Prediction, data=ValidationCC)
+summary(validation.lmCC)
+
+#########Step 3: All Factor Evaluate the model
+#Generate predictions of validation data using Random Forest Model
+prediction.validationC <- predict(fit_rf, ValidSetC) #predict w/ validation 
+
+#Compare correlation b/w validation predictions and observations
+cor.test(prediction.validationC, ValidSetC$Rs_Norm, method = "pearson", alpha=.05)
+
+ValidationC <- cbind(prediction.validationC, ValidSetC)
+names(ValidationC)[1] <- "Prediction"
+
+validation.lmC <- lm(Rs_Norm~Prediction, data=ValidationC)
+summary(validation.lmC)
+
+AIC(validation.lmCC, validation.lmC)
+
+#使用All数据集，评估预测性能
+RS_predictTC <- predict(fit_rf,ValidSetC)
+
+plot(ValidSetC$Rs_Norm, RS_predictTC,main = 'AC测试集',
+     xlab = 'Data of training', ylab = 'Predict',xlim=c(0,12), ylim=c(0,12))
+abline(0, 1)
+z<-line(ValidSetC$Rs_Norm,RS_predictTC)
+abline(coef(z),lwd=2, lty = 1,xaxs="s")
+text(2, 10, c("R=0.82,p<2.2e-16"),cex=1,font=2,col="#000000")
+
+rmseTC <- sqrt(mean((ValidSetC$Rs_Norm - RS_predictTC )^2))
+rmseTC
+# 计算观测值数量
+n <- length(RS_predictTC)
+
+# 计算每个观测值的差异，并求平方
+diff <- ValidSetC$Rs_Norm - RS_predictTC
+squared_diff <- diff^2
+
+# 计算MSE
+mse <- sum(squared_diff) / n
+
+# 打印结果
+print(mse)
+
+#使用测试集，评估预测性能
+RS_predictVC <- predict(fit_rfC, ValidSetC)
+
+plot(ValidSetC$Rs_Norm, RS_predictVC, main = 'C测试集',
+     xlab = 'Data of validating', ylab = 'Predict', xlim=c(0,12), ylim=c(0,12))
+abline(0, 1)
+z<-line(ValidSetC$Rs_Norm,RS_predictVC)
+abline(coef(z),lwd=2, lty = 1,xaxs="s")
+text(2, 10, c("R=0.82,p<2.2e-16"),cex=1,font=2,col="#000000")
+
+rmseVC <- sqrt(mean((ValidSetC$Rs_Norm - RS_predictVC )^2))
+rmseVC
+# 计算观测值数量
+n <- length(RS_predictVC)
+
+# 计算每个观测值的差异，并求平方
+diff <- ValidSetC$Rs_Norm - RS_predictVC
+squared_diff <- diff^2
+
+# 计算MSE
+mse <- sum(squared_diff) / n
+
+# 打印结果
+print(mse)
+
+##########################
+
+########D数据的测试######
+
+set.seed (556)
+
+fit_rfD <- randomForest(Rs_Norm ~ P_LastMonth +  T_LastMonth + Measure_Month + #TS + 
+                          Pm + Tm + Latitude + absLog + Climate_Koeppon 
+                        + IGBP + LAI + BD + BS + CN + CaCO3 + CEC + Clay + Sand + 
+                          Elevation + Silt + N + OC + PH, data=TrainSetD, 
+                        keep.inbag=TRUE, mtry=5, importance=TRUE, ntree=1000)
+
+
+
+#The summary of the Standard Random Forest model
+fit_rfD
+#Variable importance measures
+importance (fit_rfD)
+#Looking at the OOB error reduction with the tree size
+plot (fit_rfD) 
+#Plotting the variable importance
+varImpPlot(fit_rfD)
+
+##关键 OTUs 识别
+#查看表示每个变量（OTUs）重要性的得分
+
+#或者使用函数 importance()
+importance_otuD <- data.frame(importance(fit_rfD))
+#head(importance_otu)
+
+#可以根据某种重要性的高低排个序，例如根据“Mean Decrease Accuracy”指标
+importance_otuD <- importance_otuD[order(importance(fit_rfD,type=1), decreasing = TRUE), ]
+#head(importance_otu)
+
+#输出表格
+write.csv(importance_otuD, 'importance_otuD.csv')
+
+#########Step 2: Evaluate the model
+#Generate predictions of validation data using Random Forest Model
+#######
+prediction.validationDD <- predict(fit_rfD, ValidSetD) #predict w/ validation 
+
+#Compare correlation b/w validation predictions and observations
+cor.test(prediction.validationDD, ValidSetD$Rs_Norm, method = "pearson", alpha=.05)
+
+ValidationDD <- cbind(prediction.validationDD, ValidSetD)
+names(ValidationDD)[1] <- "Prediction"
+
+validation.lmDD <- lm(Rs_Norm~Prediction, data=ValidationDD)
+summary(validation.lmDD)
+
+#########Step 3: All Factor Evaluate the model
+#Generate predictions of validation data using Random Forest Model
+prediction.validationD <- predict(fit_rf, ValidSetD) #predict w/ validation 
+
+#Compare correlation b/w validation predictions and observations
+cor.test(prediction.validationD, ValidSetD$Rs_Norm, method = "pearson", alpha=.05)
+
+ValidationD <- cbind(prediction.validationD, ValidSetD)
+names(ValidationD)[1] <- "Prediction"
+
+validation.lmD <- lm(Rs_Norm~Prediction, data=ValidationD)
+summary(validation.lmD)
+
+AIC(validation.lmDD, validation.lmD)
+
+#使用All数据集，评估预测性能
+RS_predictTD <- predict(fit_rf,ValidSetD)
+
+plot(ValidSetD$Rs_Norm, RS_predictTD,main = 'AD测试集',
+     xlab = 'Data of training', ylab = 'Predict',xlim=c(0,12), ylim=c(0,12))
+abline(0, 1)
+z<-line(ValidSetD$Rs_Norm,RS_predictTD)
+abline(coef(z),lwd=2, lty = 1,xaxs="s")
+text(2, 10, c("R=0.82,p<2.2e-16"),cex=1,font=2,col="#000000")
+
+rmseTD <- sqrt(mean((ValidSetD$Rs_Norm - RS_predictTD )^2))
+rmseTD
+# 计算观测值数量
+n <- length(RS_predictTD)
+
+# 计算每个观测值的差异，并求平方
+diff <- ValidSetD$Rs_Norm - RS_predictTD
+squared_diff <- diff^2
+
+# 计算MSE
+mse <- sum(squared_diff) / n
+
+# 打印结果
+print(mse)
+
+#使用测试集，评估预测性能
+RS_predictVD <- predict(fit_rfD, ValidSetD)
+
+plot(ValidSetD$Rs_Norm, RS_predictVD, main = 'D测试集',
+     xlab = 'Data of validating', ylab = 'Predict', xlim=c(0,12), ylim=c(0,12))
+abline(0, 1)
+z<-line(ValidSetD$Rs_Norm,RS_predictVD)
+abline(coef(z),lwd=2, lty = 1,xaxs="s")
+text(2, 10, c("R=0.82,p<2.2e-16"),cex=1,font=2,col="#000000")
+
+rmseVD <- sqrt(mean((ValidSetD$Rs_Norm - RS_predictVD )^2))
+rmseVD
+# 计算观测值数量
+n <- length(RS_predictVD)
+
+# 计算每个观测值的差异，并求平方
+diff <- ValidSetD$Rs_Norm - RS_predictVD
+squared_diff <- diff^2
+
+# 计算MSE
+mse <- sum(squared_diff) / n
+
+# 打印结果
+print(mse)
+
+##########################
+
+########E数据的测试######
+
+set.seed (556)
+
+fit_rfE <- randomForest(Rs_Norm ~ P_LastMonth +  T_LastMonth + Measure_Month + #TS + 
+                          Pm + Tm + Latitude + absLog + Climate_Koeppon 
+                        + IGBP + LAI + BD + BS + CN + CaCO3 + CEC + Clay + Sand + 
+                          Elevation + Silt + N + OC + PH, data=TrainSetE, 
+                        keep.inbag=TRUE, mtry=5, importance=TRUE, ntree=1000)
+
+
+
+#The summary of the Standard Random Forest model
+fit_rfE
+#Variable importance measures
+importance (fit_rfE)
+#Looking at the OOB error reduction with the tree size
+plot (fit_rfE) 
+#Plotting the variable importance
+varImpPlot(fit_rfE)
+
+##关键 OTUs 识别
+#查看表示每个变量（OTUs）重要性的得分
+
+#或者使用函数 importance()
+importance_otuE <- data.frame(importance(fit_rfE))
+#head(importance_otu)
+
+#可以根据某种重要性的高低排个序，例如根据“Mean Decrease Accuracy”指标
+importance_otuE <- importance_otuE[order(importance(fit_rfE,type=1), decreasing = TRUE), ]
+#head(importance_otu)
+
+#输出表格
+write.csv(importance_otuE, 'importance_otuE.csv')
+
+#########Step 2: Evaluate the model
+#Generate predictions of validation data using Random Forest Model
+#######
+prediction.validationEE <- predict(fit_rfE, ValidSetE) #predict w/ validation 
+
+#Compare correlation b/w validation predictions and observations
+cor.test(prediction.validationEE, ValidSetE$Rs_Norm, method = "pearson", alpha=.05)
+
+ValidationEE <- cbind(prediction.validationEE, ValidSetE)
+names(ValidationEE)[1] <- "Prediction"
+
+validation.lmEE <- lm(Rs_Norm~Prediction, data=ValidationEE)
+summary(validation.lmEE)
+
+#########Step 3: All Factor Evaluate the model
+#Generate predictions of validation data using Random Forest Model
+prediction.validationE <- predict(fit_rf, ValidSetE) #predict w/ validation 
+
+#Compare correlation b/w validation predictions and observations
+cor.test(prediction.validationE, ValidSetE$Rs_Norm, method = "pearson", alpha=.05)
+
+ValidationE <- cbind(prediction.validationE, ValidSetE)
+names(ValidationE)[1] <- "Prediction"
+
+validation.lmE <- lm(Rs_Norm~Prediction, data=ValidationE)
+summary(validation.lmE)
+
+AIC(validation.lmEE, validation.lmE)
+
+#使用All数据集，评估预测性能
+RS_predictTE <- predict(fit_rf,ValidSetE)
+
+plot(ValidSetE$Rs_Norm, RS_predictTE,main = 'AE测试集',
+     xlab = 'Data of training', ylab = 'Predict',xlim=c(0,12), ylim=c(0,12))
+abline(0, 1)
+z<-line(ValidSetE$Rs_Norm,RS_predictTE)
+abline(coef(z),lwd=2, lty = 1,xaxs="s")
+text(2, 10, c("R=0.82,p<2.2e-16"),cex=1,font=2,col="#000000")
+
+rmseTE <- sqrt(mean((ValidSetE$Rs_Norm - RS_predictTE )^2))
+rmseTE
+# 计算观测值数量
+n <- length(RS_predictTE)
+
+# 计算每个观测值的差异，并求平方
+diff <- ValidSetE$Rs_Norm - RS_predictTE
+squared_diff <- diff^2
+
+# 计算MSE
+mse <- sum(squared_diff) / n
+
+# 打印结果
+print(mse)
+
+#使用测试集，评估预测性能
+RS_predictVE <- predict(fit_rfE, ValidSetE)
+
+plot(ValidSetE$Rs_Norm, RS_predictVE, main = 'E测试集',
+     xlab = 'Data of validating', ylab = 'Predict', xlim=c(0,12), ylim=c(0,12))
+abline(0, 1)
+z<-line(ValidSetE$Rs_Norm,RS_predictVE)
+abline(coef(z),lwd=2, lty = 1,xaxs="s")
+text(2, 10, expression(R^2==0.67),cex=1,font=2,col="#000000")
+text(2, 9, expression(P<0.001),cex=1,font=2,col="#000000")
+
+
+
+rmseVE <- sqrt(mean((ValidSetE$Rs_Norm - RS_predictVE )^2))
+rmseVE
+# 计算观测值数量
+n <- length(RS_predictVE)
+
+# 计算每个观测值的差异，并求平方
+diff <- ValidSetE$Rs_Norm - RS_predictVE
+squared_diff <- diff^2
+
+# 计算MSE
+mse <- sum(squared_diff) / n
+
+# 打印结果
+print(mse)
+
+validationABC <- rbind(ValidationAA, ValidationBB,ValidationCC,ValidationDD,ValidationEE)
+names(validationABC)[1] <- "Prediction"
+
+#write.csv(validationABC,"validationABC.csv")
+
+validation.lmABC <- lm(Rs_Norm~Prediction, data=validationABC)
+summary(validation.lmABC)
+cor.test(validationABC$Prediction, validationABC$Rs_Norm, method = "spearman", alpha=.05)
+
+plot(validationABC$Rs_Norm,validationABC$Prediction, main = 'Climate model',
+     xlab = 'Observated data', ylab = 'Predicted data', xlim=c(0,12), ylim=c(0,12))
+abline(0, 1)
+z<-line(validationABC$Rs_Norm,validationABC$Prediction)
+abline(coef(z),lwd=2, lty = 2,xaxs="s",col = "red")
+text(2, 10, expression(R^2==0.677),cex=1,font=2,col="#000000")
+text(2, 9, expression(P<0.001),cex=1,font=2,col="#000000")
+
+mean(validationABC$Prediction,na.rm = T)
+
+rmse <- sqrt(mean((validationABC$Prediction - validationABC$Rs_Norm )^2))
+rmse
+# 计算观测值数量
+n <- length(validationABC$Rs_Norm)
+
+# 计算每个观测值的差异，并求平方
+diff <- validationABC$Prediction - validationABC$Rs_Norm
+squared_diff <- diff^2
+
+# 计算MSE
+mse <- sum(squared_diff) / n
+
+# 打印结果
+print(mse)
+
+AIC(validation.lm, validation.lmABC)
+
+mean(RS_predictTA,na.rm = T)
+mean(RS_predictVA,na.rm = T)
+
+mean(RS_predictTB,na.rm = T)
+mean(RS_predictVB,na.rm = T)
+
+mean(RS_predictTC,na.rm = T)
+mean(RS_predictVC,na.rm = T)
+
+mean(RS_predictTD,na.rm = T)
+mean(RS_predictVD,na.rm = T)
+
+mean(RS_predictTE,na.rm = T)
+mean(RS_predictVE,na.rm = T)
+
+e <- 1-((sum(squared_diff))/sum((validationABC$Rs_Norm - mean(validationABC$Rs_Norm))^2))
+e
+
+mre <- sum(validationABC$Prediction-validationABC$Rs_Norm)/mean(validationABC$Rs_Norm)/n
+mre
+
+
+```
+
+
+```{r 不同气候带的重要因子}
+#读取数据，两个靶向关系表
+otu <- read.delim('im.txt', sep = '\t', stringsAsFactors = FALSE, check.names = FALSE)
+otu$All <- factor(otu$All, levels = unique(otu$All))
+otu$A <- factor(otu$A, levels = unique(otu$A))
+otu$B <- factor(otu$B, levels = unique(otu$B))
+otu$C <- factor(otu$C, levels = unique(otu$C))
+otu$D <- factor(otu$D, levels = unique(otu$D))
+otu$E <- factor(otu$E, levels = unique(otu$E))
+
+#预指定颜色
+color_circRNA <- '#8DD3C7'
+color_miRNA <- c('#A65628', '#FFFFB3', '#BEBADA', '#FB8072', '#80B1D3', '#FDB462',
+                 '#B3DE69', '#FCCDE5', '#BC80BD', '#CCEBC5', '#FFED6F', '#E41A1C', '#377EB8', '#984EA3', '#FF7F00', '#FFFF33')
+color_mRNA <- c( '#F34800', '#64A10E', '#FF00FF', '#c7475b', '#66C2A5',
+                '#BEAED4', '#FDC086', '#FFFF99', '#386CB0', '#F0027F')
+color_otu <- c('#FD8072','#FDB462','#FF9F22','#FF7F00','#cc6600','#996633', '#999933', '#669900', '#4DAF4A', '#339900','#009933','#339955','#006400','#80B1D3','#377EB8','#386CB0','#6181BD','#BEBAE0','#BC80BD','#984EA3','#c7475b','#E41A1C','#F0027F','#F781BF','#FCCDE5')
+#冲击图
+otu$link <- 1
+otu <- reshape::melt(otu, id = 'link')
+
+variable <- summary(otu$variable)
+otu$flow <- rep(1:variable[1], length(variable))
+
+link <- 1 / summary(otu$value)
+for (i in names(link)) otu[which(otu$value == i),'link'] <- link[i]
+
+library(ggalluvial)
+#冲击图
+p <- ggplot(otu, aes(x = variable, y = link,
+                           stratum = value, alluvium = flow, fill = value)) +
+  geom_stratum() +  #类似堆叠柱形图
+  geom_text(stat = 'stratum', infer.label = TRUE, size = 2.5) +  #在各个区块中添加文字标签
+  geom_flow(aes.flow = 'backward') +  #这次，连线颜色就不用 miRNA 赋值了，将 mRNA 也加进来，看一下效果
+  scale_fill_manual(values = color_otu) +  #颜色赋值
+  scale_x_discrete(limits = c('All', 'A', 'B', 'C','D','E')) +  #定义簇（列）的展示顺序
+  #scale_y_continuous(expand = c(0, 0))+
+  labs(x = " ", y = '') +  #从这儿开始是一些主题参数等的设置
+  theme(legend.position = 'none', panel.background = element_blank(),
+        line = element_blank(), axis.text.x = element_text(colour = "blue"),axis.text.y=element_blank())
+
+p
+```
+
+
+```{r 不同植被的重要因子}
+########A数据的测试##
+
+TrainSetIA <- subset(TrainSet, IBGP1 == "Cro" )
+TrainSetIB <- subset(TrainSet, IBGP1 == "Shr" )
+TrainSetIC <- subset(TrainSet, IBGP1 == "For" )
+TrainSetID <- subset(TrainSet, IBGP1 == "Gra" )
+TrainSetIE <- subset(TrainSet, IBGP1 == "Oth" )
+
+ValidSetIA <- subset(ValidSet, IBGP1 == "Cro" )
+ValidSetIB <- subset(ValidSet, IBGP1 == "Shr" )
+ValidSetIC <- subset(ValidSet, IBGP1 == "For" )
+ValidSetID <- subset(ValidSet, IBGP1 == "Gra" )
+ValidSetIE <- subset(ValidSet, IBGP1 == "Oth" )
+
+set.seed (556)
+
+fit_rfIA <- randomForest(Rs_Norm ~ P_LastMonth +  T_LastMonth + Measure_Month + #TS + 
+                         Pm + Tm + Latitude + absLog + Climate_Koeppon 
+                       + IGBP + LAI + BD + BS + CN + CaCO3 + CEC + Clay + Sand + 
+                         Elevation + Silt + N + OC + PH, data=TrainSetIA, 
+                       keep.inbag=TRUE, mtry=5, importance=TRUE, ntree=1000)
+
+
+
+#The summary of the Standard Random Forest model
+fit_rfIA
+#Variable importance measures
+importance (fit_rfIA)
+#Looking at the OOB error reduction with the tree size
+plot (fit_rfIA) 
+#Plotting the variable importance
+varImpPlot(fit_rfIA)
+
+##关键 OTUs 识别
+#查看表示每个变量（OTUs）重要性的得分
+
+#或者使用函数 importance()
+importance_otuIA <- data.frame(importance(fit_rfIA))
+#head(importance_otu)
+
+#可以根据某种重要性的高低排个序，例如根据“Mean Decrease Accuracy”指标
+importance_otuIA <- importance_otuIA[order(importance(fit_rfIA,type=1), decreasing = TRUE), ]
+#head(importance_otu)
+
+#输出表格
+write.csv(importance_otuIA, 'importance_otuIA.csv')
+
+#########Step 2: Evaluate the model
+#Generate predictions of validation data using Random Forest Model
+#######
+prediction.validationIAA <- predict(fit_rfIA, ValidSetIA) #predict w/ validation 
+
+#Compare correlation b/w validation predictions and observations
+cor.test(prediction.validationIAA, ValidSetIA$Rs_Norm, method = "pearson", alpha=.05)
+
+ValidationIAA <- cbind(prediction.validationIAA, ValidSetIA)
+names(ValidationIAA)[1] <- "Prediction"
+
+validation.lmIAA <- lm(Rs_Norm~Prediction, data=ValidationIAA)
+summary(validation.lmIAA)
+
+#########Step 3: All Factor Evaluate the model
+#Generate predictions of validation data using Random Forest Model
+prediction.validationIA <- predict(fit_rf, ValidSetIA) #predict w/ validation 
+
+#Compare correlation b/w validation predictions and observations
+cor.test(prediction.validationIA, ValidSetIA$Rs_Norm, method = "pearson", alpha=.05)
+
+ValidationIA <- cbind(prediction.validationIA, ValidSetIA)
+names(ValidationIA)[1] <- "Prediction"
+
+validation.lmIA <- lm(Rs_Norm~Prediction, data=ValidationIA)
+summary(validation.lmIA)
+
+AIC(validation.lmIAA, validation.lmIA)
+
+#使用All数据集，评估预测性能
+RS_predictTIA <- predict(fit_rf,ValidSetIA)
+
+plot(ValidSetIA$Rs_Norm, RS_predictTIA,main = 'AA测试集',
+     xlab = 'Data of training', ylab = 'Predict',xlim=c(0,12), ylim=c(0,12))
+abline(0, 1)
+z<-line(ValidSetIA$Rs_Norm,RS_predictTIA)
+abline(coef(z),lwd=2, lty = 1,xaxs="s")
+text(2, 10, c("R=0.82,p<2.2e-16"),cex=1,font=2,col="#000000")
+
+rmseTIA <- sqrt(mean((ValidSetIA$Rs_Norm - RS_predictTIA )^2))
+rmseTIA
+# 计算观测值数量
+n <- length(RS_predictTIA)
+
+# 计算每个观测值的差异，并求平方
+diff <- ValidSetIA$Rs_Norm - RS_predictTIA
+squared_diff <- diff^2
+
+# 计算MSE
+mse <- sum(squared_diff) / n
+
+# 打印结果
+print(mse)
+
+#使用测试集，评估预测性能
+RS_predictVIA <- predict(fit_rfIA, ValidSetIA)
+
+plot(ValidSetIA$Rs_Norm, RS_predictVIA, main = 'A测试集',
+     xlab = 'Data of validating', ylab = 'Predict', xlim=c(0,12), ylim=c(0,12))
+abline(0, 1)
+z<-line(ValidSetIA$Rs_Norm,RS_predictVIA)
+abline(coef(z),lwd=2, lty = 1,xaxs="s")
+text(2, 10, c("R=0.82,p<2.2e-16"),cex=1,font=2,col="#000000")
+
+rmseVIA <- sqrt(mean((ValidSetIA$Rs_Norm - RS_predictVIA )^2))
+rmseVIA
+# 计算观测值数量
+n <- length(RS_predictVIA)
+
+# 计算每个观测值的差异，并求平方
+diff <- ValidSetIA$Rs_Norm - RS_predictVIA
+squared_diff <- diff^2
+
+# 计算MSE
+mse <- sum(squared_diff) / n
+
+# 打印结果
+print(mse)
+
+####
+
+########B数据的测试##
+
+set.seed (556)
+
+fit_rfIB <- randomForest(Rs_Norm ~ P_LastMonth +  T_LastMonth + Measure_Month + #TS + 
+                          Pm + Tm + Latitude + absLog + Climate_Koeppon 
+                        + IGBP + LAI + BD + BS + CN + CaCO3 + CEC + Clay + Sand + 
+                          Elevation + Silt + N + OC + PH, data=TrainSetIB, 
+                        keep.inbag=TRUE, mtry=5, importance=TRUE, ntree=1000)
+
+
+
+#The summary of the Standard Random Forest model
+fit_rfIB
+#Variable importance measures
+importance (fit_rfIB)
+#Looking at the OOB error reduction with the tree size
+plot (fit_rfIB) 
+#Plotting the variable importance
+varImpPlot(fit_rfIB)
+
+##关键 OTUs 识别
+#查看表示每个变量（OTUs）重要性的得分
+
+#或者使用函数 importance()
+importance_otuIB <- data.frame(importance(fit_rfIB))
+#head(importance_otu)
+
+#可以根据某种重要性的高低排个序，例如根据“Mean Decrease Accuracy”指标
+importance_otuIB <- importance_otuIB[order(importance(fit_rfIB,type=1), decreasing = TRUE), ]
+#head(importance_otu)
+
+#输出表格
+write.csv(importance_otuIB, 'importance_otuIB.csv')
+
+#########Step 2: Evaluate the model
+#Generate predictions of validation data using Random Forest Model
+#######
+prediction.validationIBB <- predict(fit_rfIB, ValidSetIB) #predict w/ validation 
+
+#Compare correlation b/w validation predictions and observations
+cor.test(prediction.validationIBB, ValidSetIB$Rs_Norm, method = "pearson", alpha=.05)
+
+ValidationIBB <- cbind(prediction.validationIBB, ValidSetIB)
+names(ValidationIBB)[1] <- "Prediction"
+
+validation.lmIBB <- lm(Rs_Norm~Prediction, data=ValidationIBB)
+summary(validation.lmIBB)
+
+#########Step 3: All Factor Evaluate the model
+#Generate predictions of validation data using Random Forest Model
+prediction.validationIB <- predict(fit_rf, ValidSetIB) #predict w/ validation 
+
+#Compare correlation b/w validation predictions and observations
+cor.test(prediction.validationIB, ValidSetIB$Rs_Norm, method = "pearson", alpha=.05)
+
+ValidationIB <- cbind(prediction.validationIB, ValidSetIB)
+names(ValidationIB)[1] <- "Prediction"
+
+validation.lmIB <- lm(Rs_Norm~Prediction, data=ValidationIB)
+summary(validation.lmIB)
+
+AIC(validation.lmIBB, validation.lmIB)
+
+#使用All数据集，评估预测性能
+RS_predictTIB <- predict(fit_rf,ValidSetIB)
+
+plot(ValidSetIB$Rs_Norm, RS_predictTIB,main = 'AB测试集',
+     xlab = 'Data of training', ylab = 'Predict',xlim=c(0,12), ylim=c(0,12))
+abline(0, 1)
+z<-line(ValidSetIB$Rs_Norm,RS_predictTIB)
+abline(coef(z),lwd=2, lty = 1,xaxs="s")
+text(2, 10, c("R=0.82,p<2.2e-16"),cex=1,font=2,col="#000000")
+
+rmseTIB <- sqrt(mean((ValidSetIB$Rs_Norm - RS_predictTIB )^2))
+rmseTIB
+
+# 计算观测值数量
+n <- length(RS_predictTIB)
+
+# 计算每个观测值的差异，并求平方
+diff <- ValidSetIB$Rs_Norm - RS_predictTIB
+squared_diff <- diff^2
+
+# 计算MSE
+mse <- sum(squared_diff) / n
+
+# 打印结果
+print(mse)
+
+#使用测试集，评估预测性能
+RS_predictVIB <- predict(fit_rfIB, ValidSetIB)
+
+plot(ValidSetIB$Rs_Norm, RS_predictVIB, main = 'B测试集',
+     xlab = 'Data of validating', ylab = 'Predict', xlim=c(0,12), ylim=c(0,12))
+abline(0, 1)
+z<-line(ValidSetIB$Rs_Norm,RS_predictVIB)
+abline(coef(z),lwd=2, lty = 1,xaxs="s")
+text(2, 10, c("R=0.82,p<2.2e-16"),cex=1,font=2,col="#000000")
+
+rmseVIB <- sqrt(mean((ValidSetIB$Rs_Norm - RS_predictVIB )^2))
+rmseVIB
+# 计算观测值数量
+n <- length(RS_predictVIB)
+
+# 计算每个观测值的差异，并求平方
+diff <- ValidSetIB$Rs_Norm - RS_predictVIB
+squared_diff <- diff^2
+
+# 计算MSE
+mse <- sum(squared_diff) / n
+
+# 打印结果
+print(mse)
+
+##########################
+
+########C数据的测试######
+
+set.seed (556)
+
+fit_rfIC <- randomForest(Rs_Norm ~ P_LastMonth +  T_LastMonth + Measure_Month + #TS + 
+                          Pm + Tm + Latitude + absLog + Climate_Koeppon 
+                        + IGBP + LAI + BD + BS + CN + CaCO3 + CEC + Clay + Sand + 
+                          Elevation + Silt + N + OC + PH, data=TrainSetIC, 
+                        keep.inbag=TRUE, mtry=5, importance=TRUE, ntree=1000)
+
+
+
+#The summary of the Standard Random Forest model
+fit_rfIC
+#Variable importance measures
+importance (fit_rfIC)
+#Looking at the OOB error reduction with the tree size
+plot (fit_rfIC) 
+#Plotting the variable importance
+varImpPlot(fit_rfIC)
+
+##关键 OTUs 识别
+#查看表示每个变量（OTUs）重要性的得分
+
+#或者使用函数 importance()
+importance_otuIC <- data.frame(importance(fit_rfIC))
+#head(importance_otu)
+
+#可以根据某种重要性的高低排个序，例如根据“Mean Decrease Accuracy”指标
+importance_otuIC <- importance_otuIC[order(importance(fit_rfIC,type=1), decreasing = TRUE), ]
+#head(importance_otu)
+
+#输出表格
+write.csv(importance_otuIC, 'importance_otuIC.csv')
+
+#########Step 2: Evaluate the model
+#Generate predictions of validation data using Random Forest Model
+#######
+prediction.validationICC <- predict(fit_rfIC, ValidSetIC) #predict w/ validation 
+
+#Compare correlation b/w validation predictions and observations
+cor.test(prediction.validationICC, ValidSetIC$Rs_Norm, method = "pearson", alpha=.05)
+
+ValidationICC <- cbind(prediction.validationICC, ValidSetIC)
+names(ValidationICC)[1] <- "Prediction"
+
+validation.lmICC <- lm(Rs_Norm~Prediction, data=ValidationICC)
+summary(validation.lmICC)
+
+#########Step 3: All Factor Evaluate the model
+#Generate predictions of validation data using Random Forest Model
+prediction.validationIC <- predict(fit_rf, ValidSetIC) #predict w/ validation 
+
+#Compare correlation b/w validation predictions and observations
+cor.test(prediction.validationIC, ValidSetIC$Rs_Norm, method = "pearson", alpha=.05)
+
+ValidationIC <- cbind(prediction.validationIC, ValidSetIC)
+names(ValidationIC)[1] <- "Prediction"
+
+validation.lmIC <- lm(Rs_Norm~Prediction, data=ValidationIC)
+summary(validation.lmIC)
+
+AIC(validation.lmICC, validation.lmIC)
+
+#使用All数据集，评估预测性能
+RS_predictTIC <- predict(fit_rf,ValidSetIC)
+
+plot(ValidSetIC$Rs_Norm, RS_predictTIC,main = 'AC测试集',
+     xlab = 'Data of training', ylab = 'Predict',xlim=c(0,12), ylim=c(0,12))
+abline(0, 1)
+z<-line(ValidSetIC$Rs_Norm,RS_predictTIC)
+abline(coef(z),lwd=2, lty = 1,xaxs="s")
+text(2, 10, c("R=0.82,p<2.2e-16"),cex=1,font=2,col="#000000")
+
+rmseTIC <- sqrt(mean((ValidSetIC$Rs_Norm - RS_predictTIC )^2))
+rmseTIC
+# 计算观测值数量
+n <- length(RS_predictTIC)
+
+# 计算每个观测值的差异，并求平方
+diff <- ValidSetIC$Rs_Norm - RS_predictTIC
+squared_diff <- diff^2
+
+# 计算MSE
+mse <- sum(squared_diff) / n
+
+# 打印结果
+print(mse)
+
+#使用测试集，评估预测性能
+RS_predictVIC <- predict(fit_rfIC, ValidSetIC)
+
+plot(ValidSetIC$Rs_Norm, RS_predictVIC, main = 'C测试集',
+     xlab = 'Data of validating', ylab = 'Predict', xlim=c(0,12), ylim=c(0,12))
+abline(0, 1)
+z<-line(ValidSetIC$Rs_Norm,RS_predictVIC)
+abline(coef(z),lwd=2, lty = 1,xaxs="s")
+text(2, 10, c("R=0.82,p<2.2e-16"),cex=1,font=2,col="#000000")
+
+rmseVIC <- sqrt(mean((ValidSetIC$Rs_Norm - RS_predictVIC )^2))
+rmseVIC
+# 计算观测值数量
+n <- length(RS_predictVIC)
+
+# 计算每个观测值的差异，并求平方
+diff <- ValidSetIC$Rs_Norm - RS_predictVIC
+squared_diff <- diff^2
+
+# 计算MSE
+mse <- sum(squared_diff) / n
+
+# 打印结果
+print(mse)
+
+##########################
+
+########D数据的测试######
+
+set.seed (556)
+
+fit_rfID <- randomForest(Rs_Norm ~ P_LastMonth +  T_LastMonth + Measure_Month + #TS + 
+                          Pm + Tm + Latitude + absLog + Climate_Koeppon 
+                        + IGBP + LAI + BD + BS + CN + CaCO3 + CEC + Clay + Sand + 
+                          Elevation + Silt + N + OC + PH, data=TrainSetID, 
+                        keep.inbag=TRUE, mtry=5, importance=TRUE, ntree=1000)
+
+
+
+#The summary of the Standard Random Forest model
+fit_rfID
+#Variable importance measures
+importance (fit_rfID)
+#Looking at the OOB error reduction with the tree size
+plot (fit_rfID) 
+#Plotting the variable importance
+varImpPlot(fit_rfID)
+
+##关键 OTUs 识别
+#查看表示每个变量（OTUs）重要性的得分
+
+#或者使用函数 importance()
+importance_otuID <- data.frame(importance(fit_rfID))
+#head(importance_otu)
+
+#可以根据某种重要性的高低排个序，例如根据“Mean Decrease Accuracy”指标
+importance_otuID <- importance_otuID[order(importance(fit_rfID,type=1), decreasing = TRUE), ]
+#head(importance_otu)
+
+#输出表格
+write.csv(importance_otuID, 'importance_otuID.csv')
+
+#########Step 2: Evaluate the model
+#Generate predictions of validation data using Random Forest Model
+#######
+prediction.validationIDD <- predict(fit_rfID, ValidSetID) #predict w/ validation 
+
+#Compare correlation b/w validation predictions and observations
+cor.test(prediction.validationIDD, ValidSetID$Rs_Norm, method = "pearson", alpha=.05)
+
+ValidationIDD <- cbind(prediction.validationIDD, ValidSetID)
+names(ValidationIDD)[1] <- "Prediction"
+
+validation.lmIDD <- lm(Rs_Norm~Prediction, data=ValidationIDD)
+summary(validation.lmIDD)
+
+#########Step 3: All Factor Evaluate the model
+#Generate predictions of validation data using Random Forest Model
+prediction.validationID <- predict(fit_rf, ValidSetID) #predict w/ validation 
+
+#Compare correlation b/w validation predictions and observations
+cor.test(prediction.validationID, ValidSetID$Rs_Norm, method = "pearson", alpha=.05)
+
+ValidationID <- cbind(prediction.validationID, ValidSetID)
+names(ValidationID)[1] <- "Prediction"
+
+validation.lmID <- lm(Rs_Norm~Prediction, data=ValidationID)
+summary(validation.lmID)
+
+AIC(validation.lmIDD, validation.lmID)
+
+#使用All数据集，评估预测性能
+RS_predictTID <- predict(fit_rf,ValidSetID)
+
+plot(ValidSetID$Rs_Norm, RS_predictTID,main = 'AD测试集',
+     xlab = 'Data of training', ylab = 'Predict',xlim=c(0,12), ylim=c(0,12))
+abline(0, 1)
+z<-line(ValidSetID$Rs_Norm,RS_predictTID)
+abline(coef(z),lwd=2, lty = 1,xaxs="s")
+text(2, 10, c("R=0.82,p<2.2e-16"),cex=1,font=2,col="#000000")
+
+rmseTID <- sqrt(mean((ValidSetID$Rs_Norm - RS_predictTID )^2))
+rmseTID
+# 计算观测值数量
+n <- length(RS_predictTID)
+
+# 计算每个观测值的差异，并求平方
+diff <- ValidSetID$Rs_Norm - RS_predictTID
+squared_diff <- diff^2
+
+# 计算MSE
+mse <- sum(squared_diff) / n
+
+# 打印结果
+print(mse)
+
+#使用测试集，评估预测性能
+RS_predictVID <- predict(fit_rfID, ValidSetID)
+
+plot(ValidSetID$Rs_Norm, RS_predictVID, main = 'D测试集',
+     xlab = 'Data of validating', ylab = 'Predict', xlim=c(0,12), ylim=c(0,12))
+abline(0, 1)
+z<-line(ValidSetID$Rs_Norm,RS_predictVID)
+abline(coef(z),lwd=2, lty = 1,xaxs="s")
+text(2, 10, c("R=0.82,p<2.2e-16"),cex=1,font=2,col="#000000")
+
+rmseVID <- sqrt(mean((ValidSetID$Rs_Norm - RS_predictVID )^2))
+rmseVID
+# 计算观测值数量
+n <- length(RS_predictVID)
+
+# 计算每个观测值的差异，并求平方
+diff <- ValidSetID$Rs_Norm - RS_predictVID
+squared_diff <- diff^2
+
+# 计算MSE
+mse <- sum(squared_diff) / n
+
+# 打印结果
+print(mse)
+
+
+##########################
+
+########E数据的测试######
+
+set.seed (556)
+
+fit_rfIE <- randomForest(Rs_Norm ~ P_LastMonth +  T_LastMonth + Measure_Month + #TS + 
+                          Pm + Tm + Latitude + absLog + Climate_Koeppon 
+                        + IGBP + LAI + BD + BS + CN + CaCO3 + CEC + Clay + Sand + 
+                          Elevation + Silt + N + OC + PH, data=TrainSetIE, 
+                        keep.inbag=TRUE, mtry=5, importance=TRUE, ntree=1000)
+
+
+
+#The summary of the Standard Random Forest model
+fit_rfIE
+#Variable importance measures
+importance (fit_rfIE)
+#Looking at the OOB error reduction with the tree size
+plot (fit_rfIE) 
+#Plotting the variable importance
+varImpPlot(fit_rfIE)
+
+##关键 OTUs 识别
+#查看表示每个变量（OTUs）重要性的得分
+
+#或者使用函数 importance()
+importance_otuIE <- data.frame(importance(fit_rfIE))
+#head(importance_otu)
+
+#可以根据某种重要性的高低排个序，例如根据“Mean Decrease Accuracy”指标
+importance_otuIE <- importance_otuIE[order(importance(fit_rfIE,type=1), decreasing = TRUE), ]
+#head(importance_otu)
+
+#输出表格
+write.csv(importance_otuIE, 'importance_otuIE.csv')
+
+#########Step 2: Evaluate the model
+#Generate predictions of validation data using Random Forest Model
+#######
+prediction.validationIEE <- predict(fit_rfIE, ValidSetIE) #predict w/ validation 
+
+#Compare correlation b/w validation predictions and observations
+cor.test(prediction.validationIEE, ValidSetIE$Rs_Norm, method = "pearson", alpha=.05)
+
+ValidationIEE <- cbind(prediction.validationIEE, ValidSetIE)
+names(ValidationIEE)[1] <- "Prediction"
+
+validation.lmIEE <- lm(Rs_Norm~Prediction, data=ValidationIEE)
+summary(validation.lmIEE)
+
+#########Step 3: All Factor Evaluate the model
+#Generate predictions of validation data using Random Forest Model
+prediction.validationIE <- predict(fit_rf, ValidSetIE) #predict w/ validation 
+
+#Compare correlation b/w validation predictions and observations
+cor.test(prediction.validationIE, ValidSetIE$Rs_Norm, method = "pearson", alpha=.05)
+
+ValidationIE <- cbind(prediction.validationIE, ValidSetIE)
+names(ValidationIE)[1] <- "Prediction"
+
+validation.lmIE <- lm(Rs_Norm~Prediction, data=ValidationIE)
+summary(validation.lmIE)
+
+AIC(validation.lmIEE, validation.lmIE)
+
+#使用All数据集，评估预测性能
+RS_predictTIE <- predict(fit_rf,ValidSetIE)
+
+plot(ValidSetIE$Rs_Norm, RS_predictTIE,main = 'AE测试集',
+     xlab = 'Data of training', ylab = 'Predict',xlim=c(0,12), ylim=c(0,12))
+abline(0, 1)
+z<-line(ValidSetIE$Rs_Norm,RS_predictTIE)
+abline(coef(z),lwd=2, lty = 1,xaxs="s")
+text(2, 10, c("R=0.82,p<2.2e-16"),cex=1,font=2,col="#000000")
+
+rmseTIE <- sqrt(mean((ValidSetIE$Rs_Norm - RS_predictTIE )^2))
+rmseTIE
+# 计算观测值数量
+n <- length(RS_predictTIE)
+
+# 计算每个观测值的差异，并求平方
+diff <- ValidSetIE$Rs_Norm - RS_predictTIE
+squared_diff <- diff^2
+
+# 计算MSE
+mse <- sum(squared_diff) / n
+
+# 打印结果
+print(mse)
+
+#使用测试集，评估预测性能
+RS_predictVIE <- predict(fit_rfIE, ValidSetIE)
+
+plot(ValidSetIE$Rs_Norm, RS_predictVIE, main = 'E测试集',
+     xlab = 'Data of validating', ylab = 'Predict', xlim=c(0,12), ylim=c(0,12))
+abline(0, 1)
+z<-line(ValidSetIE$Rs_Norm,RS_predictVIE)
+abline(coef(z),lwd=2, lty = 1,xaxs="s")
+text(2, 10, expression(R^2==0.67),cex=1,font=2,col="#000000")
+text(2, 9, expression(P<0.001),cex=1,font=2,col="#000000")
+
+rmseVIE <- sqrt(mean((ValidSetIE$Rs_Norm - RS_predictVIE )^2))
+rmseVIE
+# 计算观测值数量
+n <- length(RS_predictVIE)
+
+# 计算每个观测值的差异，并求平方
+diff <- ValidSetIE$Rs_Norm - RS_predictVIE
+squared_diff <- diff^2
+
+# 计算MSE
+mse <- sum(squared_diff) / n
+
+# 打印结果
+print(mse)
+
+validationIABC <- rbind(ValidationIAA, ValidationIBB,ValidationICC,ValidationIDD,ValidationIEE)
+names(validationIABC)[1] <- "Prediction"
+
+validation.lmIABC <- lm(Rs_Norm~Prediction, data=validationIABC)
+summary(validation.lmIABC)
+
+cor.test(validationIABC$Prediction, validationIABC$Rs_Norm, method = "spearman", alpha=.05)
+
+plot(validationIABC$Rs_Norm,validationIABC$Prediction, main = 'Land_cover model',
+     xlab = 'Observated data', ylab = 'Predicted data', xlim=c(0,12), ylim=c(0,12))
+abline(0, 1)
+z<-line(validationIABC$Rs_Norm,validationIABC$Prediction)
+abline(coef(z),lwd=2, lty = 2,xaxs="s",col = "red")
+text(2, 10, expression(R^2==0.679),cex=1,font=2,col="#000000")
+text(2, 9, expression(P<0.001),cex=1,font=2,col="#000000")
+
+mean(validationIABC$Prediction,na.rm = T)
+
+rmse <- sqrt(mean((validationIABC$Prediction - validationIABC$Rs_Norm )^2))
+rmse
+# 计算观测值数量
+n <- length(validationIABC$Rs_Norm)
+
+# 计算每个观测值的差异，并求平方
+diff <- validationIABC$Prediction - validationIABC$Rs_Norm
+squared_diff <- diff^2
+
+# 计算MSE
+mse <- sum(squared_diff) / n
+
+# 打印结果
+print(mse)
+
+AIC(validation.lm, validation.lmIABC)
+
+mean(RS_predictTIA,na.rm = T)
+mean(RS_predictVIA,na.rm = T)
+
+mean(RS_predictTIB,na.rm = T)
+mean(RS_predictVIB,na.rm = T)
+
+mean(RS_predictTIC,na.rm = T)
+mean(RS_predictVIC,na.rm = T)
+
+mean(RS_predictTID,na.rm = T)
+mean(RS_predictVID,na.rm = T)
+
+mean(RS_predictTIE,na.rm = T)
+mean(RS_predictVIE,na.rm = T)
+
+e <- 1-((sum(squared_diff))/sum((validationIABC$Rs_Norm - mean(validationIABC$Rs_Norm))^2))
+e
+
+mre <- sum(validationIABC$Prediction-validationIABC$Rs_Norm)/mean(validationIABC$Rs_Norm)/n
+mre
+
+```
+
+Add a new chunk by clicking the *Insert Chunk* button on the toolbar or by pressing *Ctrl+Alt+I*.
+
+When you save the notebook, an HTML file containing the code and output will be saved alongside it (click the *Preview* button or press *Ctrl+Shift+K* to preview the HTML file).
+
+The preview shows you a rendered HTML copy of the contents of the editor. Consequently, unlike *Knit*, *Preview* does not run any R code chunks. Instead, the output of the chunk when it was last run in the editor is displayed.
+
+
+```{r 植被重要因子}
+#读取数据，两个靶向关系表
+otuI <- read.delim('IIm.txt', sep = '\t', stringsAsFactors = FALSE, check.names = FALSE)
+otuI$All <- factor(otuI$All, levels = unique(otuI$All))
+otuI$Cro <- factor(otuI$Cro, levels = unique(otuI$Cro))
+otuI$Shr <- factor(otuI$Shr, levels = unique(otuI$Shr))
+otuI$For <- factor(otuI$For, levels = unique(otuI$For))
+otuI$Gra <- factor(otuI$Gra, levels = unique(otuI$Gra))
+otuI$Oth <- factor(otuI$Oth, levels = unique(otuI$Oth))
+
+#预指定颜色
+color_circRNA <- '#8DD3C7'
+color_miRNA <- c('#A65628', '#FFFFB3', '#BEBADA', '#FB8072', '#80B1D3', '#FDB462',
+                 '#B3DE69', '#FCCDE5', '#BC80BD', '#CCEBC5', '#FFED6F', '#E41A1C', '#377EB8',
+                 '#4DAF4A', '#984EA3', '#FF7F00', '#FFFF33')
+color_mRNA <- c('#6181BD', '#F34800', '#64A10E', '#FF00FF', '#c7475b', '#66C2A5',
+                '#BEAED4', '#FDC086', '#FFFF99', '#386CB0', '#F0027F')
+color_otu <- c('#FD8072','#FDB462','#FF9F22','#FF7F00','#cc6600','#996633', '#999933', '#669900', '#4DAF4A', '#339900','#009933','#339955','#006400','#80B1D3','#377EB8','#386CB0','#6181BD','#BEBAE0','#BC80BD','#984EA3','#c7475b','#E41A1C','#F0027F','#F781BF','#FCCDE5')
+#冲击图
+otuI$link <- 1
+otuI <- reshape::melt(otuI, id = 'link')
+
+variable <- summary(otuI$variable)
+otuI$flow <- rep(1:variable[1], length(variable))
+
+link <- 1 / summary(otuI$value)
+for (i in names(link)) otuI[which(otuI$value == i),'link'] <- link[i]
+
+library(ggalluvial)
+#冲击图
+p <- ggplot(otuI, aes(x = variable, y = link,
+                           stratum = value, alluvium = flow, fill = value)) +
+  geom_stratum() +  #类似堆叠柱形图
+  geom_text(stat = 'stratum', infer.label = TRUE, size = 2.5) +  #在各个区块中添加文字标签
+  geom_flow(aes.flow = 'backward') +  #这次，连线颜色就不用 miRNA 赋值了，将 mRNA 也加进来，看一下效果
+  scale_fill_manual(values = color_otu) +  #颜色赋值
+  scale_x_discrete(limits = c('All', 'Cro', 'Shr', 'For','Gra','Oth')) +  #定义簇（列）的展示顺序
+  #scale_y_continuous(expand = c(0, 0))+
+  labs(x = " ", y = '') +  #从这儿开始是一些主题参数等的设置
+  theme(legend.position = 'none', panel.background = element_blank(),
+        line = element_blank(), axis.text.x = element_text(colour = "blue"),axis.text.y=element_blank())
+
+p
+```
+
+
+
+```{r}
+########D数据的测试##
+
+set.seed (556)
+
+fit_rfYQ <- randomForest(Rs_Norm ~ P_LastMonth +  T_LastMonth + Measure_Month + #TS + 
+                          Pm + Tm + Latitude + absLog + Climate_Koeppon 
+                        + IGBP + LAI + BD + BS + CN + CaCO3 + CEC + Clay + Sand + 
+                          Elevation + Silt + N + OC + PH, data=TrainSetYQ, 
+                        keep.inbag=TRUE, mtry=5, importance=TRUE, ntree=1000)
+
+
+
+#The summary of the Standard Random Forest model
+fit_rfYQ
+#Variable importance measures
+importance (fit_rfYQ)
+#Looking at the OOB error reduction with the tree size
+plot (fit_rfYQ) 
+#Plotting the variable importance
+varImpPlot(fit_rfYQ)
+
+##关键 OTUs 识别
+#查看表示每个变量（OTUs）重要性的得分
+
+#或者使用函数 importance()
+importance_otuYQ <- data.frame(importance(fit_rfYQ))
+#head(importance_otu)
+
+#可以根据某种重要性的高低排个序，例如根据“Mean Decrease Accuracy”指标
+importance_otuYQ <- importance_otuYQ[order(importance(fit_rfYQ,type=1), decreasing = TRUE), ]
+#head(importance_otu)
+
+#输出表格
+write.csv(importance_otuYQ, 'importance_otuYQ.csv')
+
+#########Step 2: Evaluate the model
+#Generate predictions of validation data using Random Forest Model
+#######
+prediction.validationYQQ <- predict(fit_rfYQ, ValidSetYQ) #predict w/ validation 
+
+#Compare correlation b/w validation predictions and observations
+cor.test(prediction.validationYQQ, ValidSetYQ$Rs_Norm, method = "pearson", alpha=.05)
+
+ValidationYQQ <- cbind(prediction.validationYQQ, ValidSetYQ)
+names(ValidationYQQ)[1] <- "Prediction"
+
+validation.lmYQQ <- lm(Rs_Norm~Prediction, data=ValidationYQQ)
+summary(validation.lmYQQ)
+
+#########Step 3: All Factor Evaluate the model
+#Generate predictions of validation data using Random Forest Model
+prediction.validationYQ <- predict(fit_rf, ValidSetYQ) #predict w/ validation 
+
+#Compare correlation b/w validation predictions and observations
+cor.test(prediction.validationYQ, ValidSetYQ$Rs_Norm, method = "pearson", alpha=.05)
+
+ValidationYQ <- cbind(prediction.validationYQ, ValidSetYQ)
+names(ValidationYQ)[1] <- "Prediction"
+
+validation.lmYQ <- lm(Rs_Norm~Prediction, data=ValidationYQ)
+summary(validation.lmYQ)
+
+AIC(validation.lmYQQ, validation.lmYQ)
+
+#使用All数据集，评估预测性能
+RS_predictTYQ <- predict(fit_rf,ValidSetYQ)
+
+plot(ValidSetYQ$Rs_Norm, RS_predictTYQ,main = 'AD测试集',
+     xlab = 'Data of training', ylab = 'Predict',xlim=c(0,12), ylim=c(0,12))
+abline(0, 1)
+z<-line(ValidSetYQ$Rs_Norm,RS_predictTYQ)
+abline(coef(z),lwd=2, lty = 1,xaxs="s")
+text(2, 10, c("R=0.82,p<2.2e-16"),cex=1,font=2,col="#000000")
+
+rmseTYQ <- sqrt(mean((ValidSetYQ$Rs_Norm - RS_predictTYQ )^2))
+rmseTYQ
+# 计算观测值数量
+n <- length(RS_predictTYQ)
+
+# 计算每个观测值的差异，并求平方
+diff <- ValidSetYQ$Rs_Norm - RS_predictTYQ
+squared_diff <- diff^2
+
+# 计算MSE
+mse <- sum(squared_diff) / n
+
+# 打印结果
+print(mse)
+
+#使用测试集，评估预测性能
+RS_predictVYQ <- predict(fit_rfYQ, ValidSetYQ)
+
+plot(ValidSetYQ$Rs_Norm, RS_predictVYQ, main = 'D测试集',
+     xlab = 'Data of validating', ylab = 'Predict', xlim=c(0,12), ylim=c(0,12))
+abline(0, 1)
+z<-line(ValidSetYQ$Rs_Norm,RS_predictVYQ)
+abline(coef(z),lwd=2, lty = 1,xaxs="s")
+text(2, 10, c("R=0.82,p<2.2e-16"),cex=1,font=2,col="#000000")
+
+rmseVYQ <- sqrt(mean((ValidSetYQ$Rs_Norm - RS_predictVYQ )^2))
+rmseVYQ
+# 计算观测值数量
+n <- length(RS_predictVYQ)
+
+# 计算每个观测值的差异，并求平方
+diff <- ValidSetYQ$Rs_Norm - RS_predictVYQ
+squared_diff <- diff^2
+
+# 计算MSE
+mse <- sum(squared_diff) / n
+
+# 打印结果
+print(mse)
+##########################
+
+########E数据的测试######
+
+set.seed (556)
+
+fit_rfYH <- randomForest(Rs_Norm ~ P_LastMonth +  T_LastMonth + Measure_Month + #TS + 
+                          Pm + Tm + Latitude + absLog + Climate_Koeppon 
+                        + IGBP + LAI + BD + BS + CN + CaCO3 + CEC + Clay + Sand + 
+                          Elevation + Silt + N + OC + PH, data=TrainSetYH, 
+                        keep.inbag=TRUE, mtry=5, importance=TRUE, ntree=1000)
+
+
+
+#The summary of the Standard Random Forest model
+fit_rfYH
+#Variable importance measures
+importance (fit_rfYH)
+#Looking at the OOB error reduction with the tree size
+plot (fit_rfYH) 
+#Plotting the variable importance
+varImpPlot(fit_rfYH)
+
+##关键 OTUs 识别
+#查看表示每个变量（OTUs）重要性的得分
+
+#或者使用函数 importance()
+importance_otuYH <- data.frame(importance(fit_rfYH))
+#head(importance_otu)
+
+#可以根据某种重要性的高低排个序，例如根据“Mean Decrease Accuracy”指标
+importance_otuYH <- importance_otuYH[order(importance(fit_rfYH,type=1), decreasing = TRUE), ]
+#head(importance_otu)
+
+#输出表格
+write.csv(importance_otuYH, 'importance_otuYH.csv')
+
+#########Step 2: Evaluate the model
+#Generate predictions of validation data using Random Forest Model
+#######
+prediction.validationYHH <- predict(fit_rfYH, ValidSetYH) #predict w/ validation 
+
+#Compare correlation b/w validation predictions and observations
+cor.test(prediction.validationYHH, ValidSetYH$Rs_Norm, method = "pearson", alpha=.05)
+
+ValidationYHH <- cbind(prediction.validationYHH, ValidSetYH)
+names(ValidationYHH)[1] <- "Prediction"
+
+validation.lmYHH <- lm(Rs_Norm~Prediction, data=ValidationYHH)
+summary(validation.lmYHH)
+
+#########Step 3: All Factor Evaluate the model
+#Generate predictions of validation data using Random Forest Model
+prediction.validationYH <- predict(fit_rf, ValidSetYH) #predict w/ validation 
+
+#Compare correlation b/w validation predictions and observations
+cor.test(prediction.validationYH, ValidSetYH$Rs_Norm, method = "pearson", alpha=.05)
+
+ValidationYH <- cbind(prediction.validationYH, ValidSetYH)
+names(ValidationYH)[1] <- "Prediction"
+
+validation.lmYH <- lm(Rs_Norm~Prediction, data=ValidationYH)
+summary(validation.lmYH)
+
+AIC(validation.lmYHH, validation.lmYH)
+
+#使用All数据集，评估预测性能
+RS_predictTYH <- predict(fit_rf,ValidSetYH)
+
+plot(ValidSetYH$Rs_Norm, RS_predictTYH,main = 'AE测试集',
+     xlab = 'Data of training', ylab = 'Predict',xlim=c(0,12), ylim=c(0,12))
+abline(0, 1)
+z<-line(ValidSetYH$Rs_Norm,RS_predictTYH)
+abline(coef(z),lwd=2, lty = 1,xaxs="s")
+text(2, 10, c("R=0.82,p<2.2e-16"),cex=1,font=2,col="#000000")
+
+rmseTYH <- sqrt(mean((ValidSetYH$Rs_Norm - RS_predictTYH )^2))
+rmseTYH
+# 计算观测值数量
+n <- length(RS_predictTYH)
+
+# 计算每个观测值的差异，并求平方
+diff <- ValidSetYH$Rs_Norm - RS_predictTYH
+squared_diff <- diff^2
+
+# 计算MSE
+mse <- sum(squared_diff) / n
+
+# 打印结果
+print(mse)
+
+#使用测试集，评估预测性能
+RS_predictVYH <- predict(fit_rfYH, ValidSetYH)
+
+plot(ValidSetYH$Rs_Norm, RS_predictVYH, main = 'E测试集',
+     xlab = 'Data of validating', ylab = 'Predict', xlim=c(0,12), ylim=c(0,12))
+abline(0, 1)
+z<-line(ValidSetYH$Rs_Norm,RS_predictVYH)
+abline(coef(z),lwd=2, lty = 1,xaxs="s")
+text(2, 10, expression(R^2==0.678),cex=1,font=2,col="#000000")
+text(2, 9, expression(P<0.001),cex=1,font=2,col="#000000")
+
+rmseVYH <- sqrt(mean((ValidSetYH$Rs_Norm - RS_predictVYH )^2))
+rmseVYH
+# 计算观测值数量
+n <- length(RS_predictVYH)
+
+# 计算每个观测值的差异，并求平方
+diff <- ValidSetYH$Rs_Norm - RS_predictVYH
+squared_diff <- diff^2
+
+# 计算MSE
+mse <- sum(squared_diff) / n
+
+# 打印结果
+print(mse)
+
+validationY <- rbind(ValidationYHH, ValidationYQQ)
+names(validationY)[1] <- "Prediction"
+
+validation.lmY <- lm(Rs_Norm~Prediction, data=validationY)
+summary(validation.lmY)
+
+cor.test(validationY$Prediction, validationY$Rs_Norm, method = "spearman", alpha=.05)
+
+plot(validationY$Rs_Norm,validationY$Prediction, main = 'Year model',
+     xlab = 'Observated data', ylab = 'Predicted data', xlim=c(0,12), ylim=c(0,12))
+abline(0, 1)
+z<-line(validationY$Rs_Norm,validationY$Prediction)
+abline(coef(z),lwd=2, lty = 2,xaxs="s",col = "red")
+text(2, 10, expression(R^2==0.678),cex=1,font=2,col="#000000")
+text(2, 9, expression(P<0.001),cex=1,font=2,col="#000000")
+
+mean(validationY$Prediction,na.rm = T)
+
+rmse <- sqrt(mean((validationY$Prediction - validationY$Rs_Norm )^2))
+rmse
+# 计算观测值数量
+n <- length(validationY$Rs_Norm)
+
+# 计算每个观测值的差异，并求平方
+diff <- validationY$Prediction - validationY$Rs_Norm
+squared_diff <- diff^2
+
+# 计算MSE
+mse <- sum(squared_diff) / n
+
+# 打印结果
+print(mse)
+
+
+AIC(validation.lm, validation.lmY)
+
+mean(RS_predictTYQ,na.rm = T)
+mean(RS_predictVYQ,na.rm = T)
+
+mean(RS_predictTYH,na.rm = T)
+mean(RS_predictVYH,na.rm = T)
+
+e <- 1-((sum(squared_diff))/sum((validationY$Rs_Norm - mean(validationY$Rs_Norm))^2))
+e
+
+mre <- sum(validationY$Prediction-validationY$Rs_Norm)/mean(validationY$Rs_Norm)/n
+mre
+```
+
+```{r}
+otuY <- read.delim('YM.txt', sep = '\t', stringsAsFactors = FALSE, check.names = FALSE)
+otuY$All <- factor(otuY$All, levels = unique(otuY$All))
+otuY$YH <- factor(otuY$YH, levels = unique(otuY$YH))
+otuY$YQ <- factor(otuY$YQ, levels = unique(otuY$YQ))
+
+
+#预指定颜色
+color_circRNA <- '#8DD3C7'
+color_miRNA <- c('#A65628', '#FFFFB3', '#BEBADA', '#FB8072', '#80B1D3', '#FDB462',
+                 '#B3DE69', '#FCCDE5', '#BC80BD', '#CCEBC5', '#FFED6F', '#E41A1C', '#377EB8',
+                 '#4DAF4A', '#984EA3', '#FF7F00', '#FFFF33')
+color_mRNA <- c('#6181BD', '#F34800', '#64A10E', '#FF00FF', '#c7475b', '#66C2A5',
+                '#BEAED4', '#FDC086', '#FFFF99', '#386CB0', '#F0027F')
+color_otu <- c('#FD8072','#FDB462','#FF9F22','#FF7F00','#cc6600','#996633', '#999933', '#669900', '#4DAF4A', '#339900','#009933','#339955','#006400','#80B1D3','#377EB8','#386CB0','#6181BD','#BEBAE0','#BC80BD','#984EA3','#c7475b','#E41A1C','#F0027F','#F781BF','#FCCDE5')
+#冲击图
+otuY$link <- 1
+otuY <- reshape::melt(otuY, id = 'link')
+
+variable <- summary(otuY$variable)
+otuY$flow <- rep(1:variable[1], length(variable))
+
+link <- 1 / summary(otuY$value)
+for (i in names(link)) otu[which(otuY$value == i),'link'] <- link[i]
+
+library(ggalluvial)
+#冲击图
+p <- ggplot(otuY, aes(x = variable, y = link,
+                           stratum = value, alluvium = flow, fill = value)) +
+  geom_stratum() +  #类似堆叠柱形图
+  geom_text(stat = 'stratum', infer.label = TRUE, size = 2.5) +  #在各个区块中添加文字标签
+  geom_flow(aes.flow = 'backward') +  #这次，连线颜色就不用 miRNA 赋值了，将 mRNA 也加进来，看一下效果
+  scale_fill_manual(values = color_otu) +  #颜色赋值
+  scale_x_discrete(limits = c('All', 'YQ', 'YH')) +  #定义簇（列）的展示顺序
+  #scale_y_continuous(expand = c(0, 0))+
+  labs(x = " ", y = '') +  #从这儿开始是一些主题参数等的设置
+  theme(legend.position = 'none', panel.background = element_blank(),
+        line = element_blank(), axis.text.x = element_text(colour = "blue"),axis.text.y=element_blank())
+
+p
+```
+
+
+
+```{r}
+##海拔划分##
+
+set.seed (556)
+
+fit_rfL <- randomForest(Rs_Norm ~ P_LastMonth  + Measure_Month + #TS + 
+                          Pm + Tm + Latitude + absLog + Climate_Koeppon +  T_LastMonth
+                        + IGBP + LAI + BD + BS + CN + CaCO3 + CEC + Clay + Sand + 
+                          Elevation + Silt + N + OC + PH, data=TrainSetL, 
+                        keep.inbag=TRUE, mtry=5, importance=TRUE, ntree=1000)
+
+
+
+#The summary of the Standard Random Forest model
+fit_rfL
+#Variable importance measures
+importance (fit_rfL)
+#Looking at the OOB error reduction with the tree size
+plot (fit_rfL) 
+#Plotting the variable importance
+varImpPlot(fit_rfL)
+
+##关键 OTUs 识别
+#查看表示每个变量（OTUs）重要性的得分
+
+#或者使用函数 importance()
+importance_otuL <- data.frame(importance(fit_rfL))
+#head(importance_otu)
+
+#可以根据某种重要性的高低排个序，例如根据“Mean Decrease Accuracy”指标
+importance_otuL <- importance_otuL[order(importance(fit_rfL,type=1), decreasing = TRUE), ]
+#head(importance_otu)
+
+#输出表格
+#write.csv(importance_otuL, 'importance_otuL.csv')
+
+#########Step 2: Evaluate the model
+#Generate predictions of validation data using Random Forest Model
+#######
+prediction.validationLL <- predict(fit_rfL, ValidSetL) #predict w/ validation 
+
+#Compare correlation b/w validation predictions and observations
+cor.test(prediction.validationLL, ValidSetL$Rs_Norm, method = "pearson", alpha=.05)
+
+ValidationLL <- cbind(prediction.validationLL, ValidSetL)
+names(ValidationLL)[1] <- "Prediction"
+
+validation.lmLL <- lm(Rs_Norm~Prediction, data=ValidationLL)
+summary(validation.lmLL)
+
+#########Step 3: All Factor Evaluate the model
+#Generate predictions of validation data using Random Forest Model
+prediction.validationL <- predict(fit_rf, ValidSetL) #predict w/ validation 
+
+#Compare correlation b/w validation predictions and observations
+cor.test(prediction.validationL, ValidSetL$Rs_Norm, method = "pearson", alpha=.05)
+
+ValidationL <- cbind(prediction.validationL, ValidSetL)
+names(ValidationL)[1] <- "Prediction"
+
+validation.lmL <- lm(Rs_Norm~Prediction, data=ValidationL)
+summary(validation.lmL)
+
+AIC(validation.lmLL, validation.lmL)
+
+#使用All数据集，评估预测性能
+RS_predictTL <- predict(fit_rf,ValidSetL)
+
+plot(ValidSetL$Rs_Norm, RS_predictTL,main = 'AD测试集',
+     xlab = 'Data of training', ylab = 'Predict',xlim=c(0,12), ylim=c(0,12))
+abline(0, 1)
+z<-line(ValidSetL$Rs_Norm,RS_predictTL)
+abline(coef(z),lwd=2, lty = 1,xaxs="s")
+text(2, 10, c("R=0.82,p<2.2e-16"),cex=1,font=2,col="#000000")
+
+rmseTL <- sqrt(mean((ValidSetL$Rs_Norm - RS_predictTL )^2))
+rmseTL
+# 计算观测值数量
+n <- length(RS_predictTL)
+
+# 计算每个观测值的差异，并求平方
+diff <- ValidSetL$Rs_Norm - RS_predictTL
+squared_diff <- diff^2
+
+# 计算MSE
+mse <- sum(squared_diff) / n
+
+# 打印结果
+print(mse)
+
+#使用测试集，评估预测性能
+RS_predictVL <- predict(fit_rfL, ValidSetL)
+
+plot(ValidSetL$Rs_Norm, RS_predictVL, main = 'D测试集',
+     xlab = 'Data of validating', ylab = 'Predict', xlim=c(0,12), ylim=c(0,12))
+abline(0, 1)
+z<-line(ValidSetL$Rs_Norm,RS_predictVL)
+abline(coef(z),lwd=2, lty = 1,xaxs="s")
+text(2, 10, c("R=0.82,p<2.2e-16"),cex=1,font=2,col="#000000")
+
+rmseVL <- sqrt(mean((ValidSetL$Rs_Norm - RS_predictVL )^2))
+rmseVL
+# 计算观测值数量
+n <- length(RS_predictVL)
+
+# 计算每个观测值的差异，并求平方
+diff <- ValidSetL$Rs_Norm - RS_predictVL
+squared_diff <- diff^2
+
+# 计算MSE
+mse <- sum(squared_diff) / n
+
+# 打印结果
+print(mse)
+##########################
+
+########M数据的测试######
+
+set.seed (556)
+
+fit_rfM <- randomForest(Rs_Norm ~ P_LastMonth +  T_LastMonth + Measure_Month + #TS + 
+                          Pm + Tm + Latitude + absLog + Climate_Koeppon 
+                        + IGBP + LAI + BD + BS + CN + CaCO3 + CEC + Clay + Sand + 
+                          Elevation + Silt + N + OC + PH, data=TrainSetM, 
+                        keep.inbag=TRUE, mtry=5, importance=TRUE, ntree=1000)
+
+
+
+#The summary of the Standard Random Forest model
+fit_rfM
+#Variable importance measures
+importance (fit_rfM)
+#Looking at the OOB error reduction with the tree size
+plot (fit_rfM) 
+#Plotting the variable importance
+varImpPlot(fit_rfM)
+
+##关键 OTUs 识别
+#查看表示每个变量（OTUs）重要性的得分
+
+#或者使用函数 importance()
+importance_otuM <- data.frame(importance(fit_rfM))
+#head(importance_otu)
+
+#可以根据某种重要性的高低排个序，例如根据“Mean Decrease Accuracy”指标
+importance_otuM <- importance_otuM[order(importance(fit_rfM,type=1), decreasing = TRUE), ]
+#head(importance_otu)
+
+#输出表格
+#write.csv(importance_otuM, 'importance_otuM.csv')
+
+#########Step 2: Evaluate the model
+#Generate predictions of validation data using Random Forest Model
+#######
+prediction.validationMM <- predict(fit_rfM, ValidSetM) #predict w/ validation 
+
+#Compare correlation b/w validation predictions and observations
+cor.test(prediction.validationMM, ValidSetM$Rs_Norm, method = "pearson", alpha=.05)
+
+ValidationMM <- cbind(prediction.validationMM, ValidSetM)
+names(ValidationMM)[1] <- "Prediction"
+
+validation.lmMM <- lm(Rs_Norm~Prediction, data=ValidationMM)
+summary(validation.lmMM)
+
+#########Step 3: All Factor Evaluate the model
+#Generate predictions of validation data using Random Forest Model
+prediction.validationM <- predict(fit_rf, ValidSetM) #predict w/ validation 
+
+#Compare correlation b/w validation predictions and observations
+cor.test(prediction.validationM, ValidSetM$Rs_Norm, method = "pearson", alpha=.05)
+
+ValidationM <- cbind(prediction.validationM, ValidSetM)
+names(ValidationM)[1] <- "Prediction"
+
+validation.lmM <- lm(Rs_Norm~Prediction, data=ValidationM)
+summary(validation.lmM)
+
+AIC(validation.lmMM, validation.lmM)
+
+#使用All数据集，评估预测性能
+RS_predictTM <- predict(fit_rf,ValidSetM)
+
+plot(ValidSetM$Rs_Norm, RS_predictTM,main = 'AE测试集',
+     xlab = 'Data of training', ylab = 'Predict',xlim=c(0,12), ylim=c(0,12))
+abline(0, 1)
+z<-line(ValidSetM$Rs_Norm,RS_predictTM)
+abline(coef(z),lwd=2, lty = 1,xaxs="s")
+text(2, 10, c("R=0.82,p<2.2e-16"),cex=1,font=2,col="#000000")
+
+rmseTM <- sqrt(mean((ValidSetM$Rs_Norm - RS_predictTM )^2))
+rmseTM
+# 计算观测值数量
+n <- length(RS_predictTM)
+
+# 计算每个观测值的差异，并求平方
+diff <- ValidSetM$Rs_Norm - RS_predictTM
+squared_diff <- diff^2
+
+# 计算MSE
+mse <- sum(squared_diff) / n
+
+# 打印结果
+print(mse)
+
+#使用测试集，评估预测性能
+RS_predictVM <- predict(fit_rfM, ValidSetM)
+
+plot(ValidSetM$Rs_Norm, RS_predictVM, main = 'E测试集',
+     xlab = 'Data of validating', ylab = 'Predict', xlim=c(0,12), ylim=c(0,12))
+abline(0, 1)
+z<-line(ValidSetM$Rs_Norm,RS_predictVM)
+abline(coef(z),lwd=2, lty = 1,xaxs="s")
+text(2, 10, expression(R^2==0.67),cex=1,font=2,col="#000000")
+text(2, 9, expression(P<0.001),cex=1,font=2,col="#000000")
+
+rmseVM <- sqrt(mean((ValidSetM$Rs_Norm - RS_predictVM )^2))
+rmseVM
+# 计算观测值数量
+n <- length(RS_predictVM)
+
+# 计算每个观测值的差异，并求平方
+diff <- ValidSetM$Rs_Norm - RS_predictVM
+squared_diff <- diff^2
+
+# 计算MSE
+mse <- sum(squared_diff) / n
+
+# 打印结果
+print(mse)
+########H数据的测试######
+
+set.seed (556)
+
+fit_rfH <- randomForest(Rs_Norm ~ P_LastMonth +  T_LastMonth + Measure_Month + #TS + 
+                          Pm + Tm + Latitude + absLog + Climate_Koeppon 
+                        + IGBP + LAI + BD + BS + CN + CaCO3 + CEC + Clay + Sand + 
+                          Elevation + Silt + N + OC + PH, data=TrainSetH, 
+                        keep.inbag=TRUE, mtry=5, importance=TRUE, ntree=1000)
+
+
+
+#The summary of the Standard Random Forest model
+fit_rfH
+#Variable importance measures
+importance (fit_rfH)
+#Looking at the OOB error reduction with the tree size
+plot (fit_rfH) 
+#Plotting the variable importance
+varImpPlot(fit_rfH)
+
+##关键 OTUs 识别
+#查看表示每个变量（OTUs）重要性的得分
+
+#或者使用函数 importance()
+importance_otuH <- data.frame(importance(fit_rfH))
+#head(importance_otu)
+
+#可以根据某种重要性的高低排个序，例如根据“Mean Decrease Accuracy”指标
+importance_otuH <- importance_otuH[order(importance(fit_rfH,type=1), decreasing = TRUE), ]
+#head(importance_otu)
+
+#输出表格
+#write.csv(importance_otuH, 'importance_otuH.csv')
+
+#########Step 2: Evaluate the model
+#Generate predictions of validation data using Random Forest Model
+#######
+prediction.validationHH <- predict(fit_rfH, ValidSetH) #predict w/ validation 
+
+#Compare correlation b/w validation predictions and observations
+cor.test(prediction.validationHH, ValidSetH$Rs_Norm, method = "pearson", alpha=.05)
+
+ValidationHH <- cbind(prediction.validationHH, ValidSetH)
+names(ValidationHH)[1] <- "Prediction"
+
+validation.lmHH <- lm(Rs_Norm~Prediction, data=ValidationHH)
+summary(validation.lmHH)
+
+#########Step 3: All Factor Evaluate the model
+#Generate predictions of validation data using Random Forest Model
+prediction.validationH <- predict(fit_rf, ValidSetH) #predict w/ validation 
+
+#Compare correlation b/w validation predictions and observations
+cor.test(prediction.validationH, ValidSetH$Rs_Norm, method = "pearson", alpha=.05)
+
+ValidationH <- cbind(prediction.validationH, ValidSetH)
+names(ValidationH)[1] <- "Prediction"
+
+validation.lmH <- lm(Rs_Norm~Prediction, data=ValidationH)
+summary(validation.lmH)
+
+AIC(validation.lmHH, validation.lmH)
+
+#使用All数据集，评估预测性能
+RS_predictTH <- predict(fit_rf,ValidSetH)
+
+plot(ValidSetH$Rs_Norm, RS_predictTH,main = 'AE测试集',
+     xlab = 'Data of training', ylab = 'Predict',xlim=c(0,12), ylim=c(0,12))
+abline(0, 1)
+z<-line(ValidSetH$Rs_Norm,RS_predictTH)
+abline(coef(z),lwd=2, lty = 1,xaxs="s")
+text(2, 10, c("R=0.82,p<2.2e-16"),cex=1,font=2,col="#000000")
+
+rmseTH <- sqrt(mean((ValidSetH$Rs_Norm - RS_predictTH )^2))
+rmseTH
+# 计算观测值数量
+n <- length(RS_predictTH)
+
+# 计算每个观测值的差异，并求平方
+diff <- ValidSetH$Rs_Norm - RS_predictTH
+squared_diff <- diff^2
+
+# 计算MSE
+mse <- sum(squared_diff) / n
+
+# 打印结果
+print(mse)
+
+#使用测试集，评估预测性能
+RS_predictVH <- predict(fit_rfH, ValidSetH)
+
+plot(ValidSetH$Rs_Norm, RS_predictVH, main = 'E测试集',
+     xlab = 'Data of validating', ylab = 'Predict', xlim=c(0,12), ylim=c(0,12))
+abline(0, 1)
+z<-line(ValidSetH$Rs_Norm,RS_predictVH)
+abline(coef(z),lwd=2, lty = 1,xaxs="s")
+text(2, 10, expression(R^2==0.67),cex=1,font=2,col="#000000")
+text(2, 9, expression(P<0.001),cex=1,font=2,col="#000000")
+
+rmseVH <- sqrt(mean((ValidSetH$Rs_Norm - RS_predictVH )^2))
+rmseVH
+# 计算观测值数量
+n <- length(RS_predictVH)
+
+# 计算每个观测值的差异，并求平方
+diff <- ValidSetH$Rs_Norm - RS_predictVH
+squared_diff <- diff^2
+
+# 计算MSE
+mse <- sum(squared_diff) / n
+
+# 打印结果
+print(mse)
+
+validationLMH <- rbind(ValidationLL, ValidationMM,ValidationHH)
+names(validationLMH)[1] <- "Prediction"
+
+validation.lmLMH <- lm(Rs_Norm~Prediction, data=validationLMH)
+summary(validation.lmLMH)
+
+cor.test(validationLMH$Prediction, validationLMH$Rs_Norm, method = "spearman", alpha=.05)
+
+plot(validationLMH$Rs_Norm,validationLMH$Prediction, main = 'Elevation model',
+     xlab = 'Observated data', ylab = 'Predicted data', xlim=c(0,12), ylim=c(0,12))
+abline(0, 1)
+z<-line(validationLMH$Rs_Norm,validationLMH$Prediction)
+abline(coef(z),lwd=2, lty = 2,xaxs="s",col = "red")
+text(2, 10, expression(R^2==0.676),cex=1,font=2,col="#000000")
+text(2, 9, expression(P<0.001),cex=1,font=2,col="#000000")
+
+mean(validationLMH$Prediction,na.rm = T)
+
+rmse <- sqrt(mean((validationLMH$Prediction - validationLMH$Rs_Norm )^2))
+rmse
+# 计算观测值数量
+n <- length(validationLMH$Rs_Norm)
+
+# 计算每个观测值的差异，并求平方
+diff <- validationLMH$Prediction - validationLMH$Rs_Norm
+squared_diff <- diff^2
+
+# 计算MSE
+mse <- sum(squared_diff) / n
+
+# 打印结果
+print(mse)
+
+AIC(validation.lm, validation.lmLMH)
+
+
+mean(RS_predictTL,na.rm = T)
+mean(RS_predictVL,na.rm = T)
+
+mean(RS_predictTM,na.rm = T)
+mean(RS_predictVM,na.rm = T)
+
+mean(RS_predictTH,na.rm = T)
+mean(RS_predictVH,na.rm = T)
+
+e <- 1-((sum(squared_diff))/sum((validationLMH$Rs_Norm - mean(validationLMH$Rs_Norm))^2))
+e
+
+mre <- sum(validationLMH$Prediction-validationLMH$Rs_Norm)/mean(validationLMH$Rs_Norm)/n
+mre
+
+```
+
+
+```{r}
+otuEE <- read.delim('E.txt', sep = '\t', stringsAsFactors = FALSE, check.names = FALSE)
+otuEE$All <- factor(otuEE$All, levels = unique(otuEE$All))
+otuEE$L <- factor(otuEE$L, levels = unique(otuEE$L))
+otuEE$M <- factor(otuEE$M, levels = unique(otuEE$M))
+otuEE$H <- factor(otuEE$H, levels = unique(otuEE$H))
+
+#预指定颜色
+color_circRNA <- '#8DD3C7'
+color_miRNA <- c('#A65628', '#FFFFB3', '#BEBADA', '#FB8072', '#80B1D3', '#FDB462',
+                 '#B3DE69', '#FCCDE5', '#BC80BD', '#CCEBC5', '#FFED6F', '#E41A1C', '#377EB8',
+                 '#4DAF4A', '#984EA3', '#FF7F00', '#FFFF33')
+color_mRNA <- c('#6181BD', '#F34800', '#64A10E', '#FF00FF', '#c7475b', '#66C2A5',
+                '#BEAED4', '#FDC086', '#FFFF99', '#386CB0', '#F0027F')
+color_otu <- c('#FD8072','#FDB462','#FF9F22','#FF7F00','#cc6600','#996633', '#999933', '#669900', '#4DAF4A', '#339900','#009933','#339955','#006400','#80B1D3','#377EB8','#386CB0','#6181BD','#BEBAE0','#BC80BD','#984EA3','#c7475b','#E41A1C','#F0027F','#F781BF','#FCCDE5')
+#冲击图
+otuEE$link <- 1
+otuEE <- reshape::melt(otuEE, id = 'link')
+
+variable <- summary(otuEE$variable)
+otuEE$flow <- rep(1:variable[1], length(variable))
+
+link <- 1 / summary(otuEE$value)
+for (i in names(link)) otuEE[which(otuEE$value == i),'link'] <- link[i]
+
+library(ggalluvial)
+#冲击图
+p <- ggplot(otuEE, aes(x = variable, y = link,
+                           stratum = value, alluvium = flow, fill = value)) +
+  geom_stratum() +  #类似堆叠柱形图
+  geom_text(stat = 'stratum', infer.label = TRUE, size = 2.5) +  #在各个区块中添加文字标签
+  geom_flow(aes.flow = 'backward') +  #这次，连线颜色就不用 miRNA 赋值了，将 mRNA 也加进来，看一下效果
+  scale_fill_manual(values = color_otu) +  #颜色赋值
+  scale_x_discrete(limits = c('All', 'L', 'M', 'H')) +  #定义簇（列）的展示顺序
+  #scale_y_continuous(expand = c(0, 0))+
+  labs(x = " ", y = '') +  #从这儿开始是一些主题参数等的设置
+  theme(legend.position = 'none', panel.background = element_blank(),
+        line = element_blank(), axis.text.x = element_text(colour = "blue"),axis.text.y=element_blank())
+
+p
+```
+
+
+```{r 全球预测}
+
+#AIC(validation.lm,validation.lmABC,validation.lmIABC,validation.lmY, validation.lmLMH)
+
+set.seed (556)
+
+mod1 <- randomForest(Rs_Norm ~ P_LastMonth   + Measure_Month + #TS + 
+                         Pm + Tm +Latitude  +absLog #+absLat#
+                         #+Longitude 
+                         + Climate_Koeppon  + IGBP + T_LastMonth
+                         + LAI  + Elevation , data=TrainSet, 
+                       keep.inbag=TRUE, mtry=5, importance=TRUE, ntree=1000)
+
+
+
+#The summary of the Standard Random Forest model
+mod1
+#Variable impor1tance measures
+importance (mod1)
+#Looking at the OOB error reduction with the tree size
+plot (mod1) 
+#Plotting the variable importance
+varImpPlot(mod1)
+
+
+prediction.va <- predict(mod1, ValidSet) #predict w/ validation 
+
+#Compare correlation b/w validation predictions and observations
+cor.test(prediction.va, ValidSet$Rs_Norm, method = "pearson", alpha=.05)
+
+cor.test(prediction.va, ValidSet$Rs_Norm, method = "spearman", alpha=.05)
+
+va <- cbind(prediction.va, ValidSet)
+names(va)[1] <- "Prediction"
+
+val <- lm(Rs_Norm~Prediction, data=va)
+summary(val)
+
+#valIABC <- lm(Rs_Norm~Prediction, data=vaIABC)
+#summary(valIABC)
+
+mean(va$Prediction,na.rm = T)
+
+rmse <- sqrt(mean((va$Prediction - va$Rs_Norm )^2))
+rmse
+# 计算观测值数量
+n <- length(va$Rs_Norm)
+
+# 计算每个观测值的差异，并求平方
+diff <- va$Prediction - va$Rs_Norm
+squared_diff <- diff^2
+
+# 计算MSE
+mse <- sum(squared_diff) / n
+
+e <- 1-((sum(squared_diff))/sum((va$Rs_Norm - mean(va$Rs_Norm))^2))
+e
+# 打印结果
+print(mse)
+
+#write.csv(va, 'JD.csv')
+#################################
+set.seed (556)
+
+modIA <- randomForest(Rs_Norm ~ P_LastMonth   + Measure_Month + #TS + 
+                         Pm + Tm + Latitude +absLog #+absLat#+Longitude 
+                         + Climate_Koeppon  + IGBP + T_LastMonth
+                         + LAI  + Elevation ,  data=TrainSetIA, 
+                       keep.inbag=TRUE, mtry=5, importance=TRUE, ntree=1000)
+
+
+
+#The summary of the Standard Random Forest model
+modIA
+#Variable impor1tance measures
+importance (modIA)
+#Looking at the OOB error reduction with the tree size
+plot (modIA) 
+#Plotting the variable importance
+varImpPlot(modIA)
+
+
+prediction.vaIA <- predict(modIA, ValidSetIA) #predict w/ validation 
+
+#Compare correlation b/w validation predictions and observations
+cor.test(prediction.vaIA, ValidSetIA$Rs_Norm, method = "pearson", alpha=.05)
+
+VaIA <- cbind(prediction.vaIA, ValidSetIA)
+names(VaIA)[1] <- "Prediction"
+
+valIA <- lm(Rs_Norm~Prediction, data=VaIA)
+summary(valIA)
+
+
+
+set.seed (556)
+
+modIB <- randomForest(Rs_Norm ~ P_LastMonth   + Measure_Month + #TS + 
+                         Pm + Tm + Latitude +absLog #+absLat#+Longitude 
+                         + Climate_Koeppon  + IGBP + T_LastMonth
+                         + LAI  + Elevation ,  data=TrainSetIB, 
+                       keep.inbag=TRUE, mtry=5, importance=TRUE, ntree=1000)
+
+
+
+#The summary of the Standard Random Forest model
+modIB
+#Variable impor1tance measures
+importance (modIB)
+#Looking at the OOB error reduction with the tree size
+plot (modIB) 
+#Plotting the variable importance
+varImpPlot(modIB)
+
+
+prediction.vaIB <- predict(modIB, ValidSetIB) #predict w/ validation 
+
+#Compare correlation b/w validation predictions and observations
+cor.test(prediction.vaIB, ValidSetIB$Rs_Norm, method = "pearson", alpha=.05)
+
+VaIB <- cbind(prediction.vaIB, ValidSetIB)
+names(VaIB)[1] <- "Prediction"
+
+valIB <- lm(Rs_Norm~Prediction, data=VaIB)
+summary(valIB)
+
+set.seed (556)
+
+modIC <- randomForest(Rs_Norm ~ P_LastMonth   + Measure_Month + #TS + 
+                         Pm + Tm + Latitude +absLog #+absLat#+Longitude 
+                         + Climate_Koeppon  + IGBP + T_LastMonth
+                         + LAI  + Elevation ,  data=TrainSetIC, 
+                       keep.inbag=TRUE, mtry=5, importance=TRUE, ntree=1000)
+
+
+
+#The summary of the Standard Random Forest model
+modIC
+#Variable impor1tance measures
+importance (modIC)
+#Looking at the OOB error reduction with the tree size
+plot (modIC) 
+#Plotting the variable importance
+varImpPlot(modIC)
+
+
+prediction.vaIC <- predict(modIC, ValidSetIC) #predict w/ validation 
+
+#Compare correlation b/w validation predictions and observations
+cor.test(prediction.vaIC, ValidSetIC$Rs_Norm, method = "pearson", alpha=.05)
+
+VaIC <- cbind(prediction.vaIC, ValidSetIC)
+names(VaIC)[1] <- "Prediction"
+
+valIC <- lm(Rs_Norm~Prediction, data=VaIC)
+summary(valIC)
+
+set.seed (556)
+
+modID <- randomForest(Rs_Norm ~ P_LastMonth   + Measure_Month + #TS + 
+                         Pm + Tm + Latitude +absLog #+absLat#+Longitude 
+                         + Climate_Koeppon  + IGBP + T_LastMonth
+                         + LAI  + Elevation ,data=TrainSetID, 
+                       keep.inbag=TRUE, mtry=5, importance=TRUE, ntree=1000)
+
+
+
+#The summary of the Standard Random Forest model
+modID
+#Variable impor1tance measures
+importance (modID)
+#Looking at the OOB error reduction with the tree size
+plot (modID) 
+#Plotting the variable importance
+varImpPlot(modID)
+
+
+prediction.vaID <- predict(modID, ValidSetID) #predict w/ validation 
+
+#Compare correlation b/w validation predictions and observations
+cor.test(prediction.vaID, ValidSetID$Rs_Norm, method = "pearson", alpha=.05)
+
+VaID <- cbind(prediction.vaID, ValidSetID)
+names(VaID)[1] <- "Prediction"
+
+valID <- lm(Rs_Norm~Prediction, data=VaID)
+summary(valID)
+
+set.seed (556)
+
+modIE <- randomForest(Rs_Norm ~ P_LastMonth   + Measure_Month + #TS + 
+                         Pm + Tm + Latitude +absLog #+absLat#+Longitude 
+                         + Climate_Koeppon  + IGBP + T_LastMonth
+                         + LAI  + Elevation , data=TrainSetIE, 
+                       keep.inbag=TRUE, mtry=5, importance=TRUE, ntree=1000)
+
+
+
+#The summary of the Standard Random Forest model
+modIE
+#Variable impor1tance measures
+importance (modIE)
+#Looking at the OOB error reduction with the tree size
+plot (modIE) 
+#Plotting the variable importance
+varImpPlot(modIE)
+
+
+prediction.vaIE <- predict(modIE, ValidSetIE) #predict w/ validation 
+
+#Compare correlation b/w validation predictions and observations
+cor.test(prediction.vaIE, ValidSetIE$Rs_Norm, method = "pearson", alpha=.05)
+
+VaIE <- cbind(prediction.vaIE, ValidSetIE)
+names(VaIE)[1] <- "Prediction"
+
+valIE <- lm(Rs_Norm~Prediction, data=VaIE)
+summary(valIE)
+
+#CK<-TrainSet$Climate_Koeppon
+#head(CK)
+#K<-globalData$IGBP
+#head(K)
+
+mean(VaIA$Prediction,na.rm = T)
+mean(VaIB$Prediction,na.rm = T)
+mean(VaIC$Prediction,na.rm = T)
+mean(VaID$Prediction,na.rm = T)
+mean(VaIE$Prediction,na.rm = T)
+
+vaIABC <- rbind(VaIA, VaIB,VaIC,VaID,VaIE)
+names(vaIABC)[1] <- "Prediction"
+
+#write.csv(vaIABC, 'ABC.csv')
+
+valIABC <- lm(Rs_Norm~Prediction, data=vaIABC)
+summary(valIABC)
+
+cor.test(vaIABC$Prediction, vaIABC$Rs_Norm, method = "spearman", alpha=.05)
+
+mean(vaIABC$Prediction,na.rm = T)
+
+rmse <- sqrt(mean((vaIABC$Prediction - vaIABC$Rs_Norm )^2))
+rmse
+# 计算观测值数量
+n <- length(vaIABC$Rs_Norm)
+
+# 计算每个观测值的差异，并求平方
+diff <- vaIABC$Prediction - vaIABC$Rs_Norm
+squared_diff <- diff^2
+
+# 计算MSE
+mse <- sum(squared_diff) / n
+
+# 打印结果
+print(mse)
+
+e <- 1-((sum(squared_diff))/sum((vaIABC$Rs_Norm - mean(vaIABC$Rs_Norm))^2))
+e
+
+AIC(val, valIABC)
+
+globalData<- read_csv("E:/论文/图片/globalData.csv",locale=locale(encoding="GBK"))
+#globalData <- data.frame(globalData)
+#globalData <-filter(globalData,Climate_Koeppon %in% TrainSet$Climate_Koeppon)
+#globalData <-filter(globalData, IGBP %in% TrainSet$IGBP)
+#globalData <- subset(globalData, !is.na(globalData$T_LastMonth))
+#globalData <-globalData[complete.cases(globalData),]
+
+#globalData$Rs_Norm<-0
+globalData %>% 
+  mutate(IGBP1 = case_when(
+    IGBP %in% c("CRO", "CVM") ~ "Cro",
+    IGBP %in% c("BSV", "OSH") ~ "Shr",
+    IGBP %in% c("DBF", "EBF", "ENF","MF") ~ "For",
+    #ClimateTypes %in% c() ~ "Cs",
+    #ClimateTypes %in% c("Cwa", "Cwb", "Cwc") ~ "Cw",
+    IGBP %in% c("GRA", "SAV", "WSA") ~ "Gra",
+    #ClimateTypes %in% c("Dsa", "Dsb", "Dsc", "Dwa", "Dwb", "Dwc", "Dwd") ~ "Dsw",
+    IGBP %in% c("SNO", "URB","WAT") ~ "Oth",
+    TRUE ~ "Oth")) -> globalData
+
+globalData$Climate_Koeppon <- as.factor(globalData$Climate_Koeppon)
+globalData$IGBP <- as.factor(globalData$IGBP)
+globalData$Measure_Month <- as.factor(globalData$Measure_Month)
+globalData$absLat <- abs(globalData$Latitude)
+globalData$absLog <- abs(globalData$Longitude)
+globalData$IGBP1 <- as.factor(globalData$IGBP1)
+
+
+GIA <- subset(globalData, IGBP1 == "Cro" )
+GIB <- subset(globalData, IGBP1 == "Shr" )
+GIC <- subset(globalData, IGBP1 == "For" )
+GID <- subset(globalData, IGBP1 == "Gra" )
+GIE <- subset(globalData, IGBP1 == "Oth" )
+
+#globalData <- globalData[complete.cases(globalData),]
+globalData$prediction <- predict(mod1, globalData)
+
+mean(globalData$prediction,na.rm = T)
+
+G1 <- subset(globalData, Measure_Month==1 )
+G2 <- subset(globalData, Measure_Month==2 )
+G3 <- subset(globalData, Measure_Month==3 )
+G4 <- subset(globalData, Measure_Month==4 )
+G5 <- subset(globalData, Measure_Month==5 )
+G6 <- subset(globalData, Measure_Month==6 )
+G7 <- subset(globalData, Measure_Month==7 )
+G8 <- subset(globalData, Measure_Month==8 )
+G9 <- subset(globalData, Measure_Month==9 )
+G10 <- subset(globalData, Measure_Month==10 )
+G11 <- subset(globalData, Measure_Month==11 )
+G12 <- subset(globalData, Measure_Month==12 )
+
+G1$predictions <-(G1$prediction+G2$prediction+G3$prediction+G4$prediction+G5$prediction+G6$prediction+G7$prediction+G8$prediction+G9$prediction+G10$prediction+G11$prediction)/11#+G12$prediction
+
+
+G1$Predicted_Rs <-(G1$prediction+G2$prediction+G3$prediction+G4$prediction+G5$prediction+G6$prediction+G7$prediction+G8$prediction+G9$prediction+G10$prediction+G11$prediction)/11#+G12$prediction
+
+G1_no_na <- G1[!is.na(G1 $predictions), ]
+write.csv(G1_no_na,"G1_no_na.csv")
+
+ggplot(G1_no_na, aes(Longitude, Latitude, color = predictions)) +#geom_sf()+
+  #scale_fill_viridis_c(option = "D",direction = -1,name='MAT(℃)',na.value = 'transparent')+
+  #scale_colour_steps(low = "white", high = "#386CB0", n.breaks=7)+
+  geom_point(size = 0.3) +
+  lims(x = c(-180, 180), y = c(-90, 90)) +
+  labs(color = "Predicted Rs") +
+  scale_color_viridis_c(option = "E")+
+  theme(
+        panel.grid=element_blank(), 
+        panel.background=element_blank(),
+        panel.border = element_rect(linetype = "solid", linewidth = 1,fill = NA),
+        legend.position = c(0.11,0.3)
+        )
+
+ggplot() + 
+  geom_sf() + 
+  geom_tile(data = G1_no_na,aes(Longitude, Latitude, fill = predictions))+
+  #scale_fill_gradientn(colours = my_colormap)+
+  labs(colour = "Predicted Rs") +
+  scale_color_viridis_c(option = "C")+
+  theme(
+        panel.grid=element_blank(), 
+        panel.background=element_blank(),
+        panel.border = element_rect(linetype = "solid", linewidth = 1,fill = NA),
+        #legend.position = c(0.11,0.3)
+        )
+my_colormap <- colorRampPalette(rev(brewer.pal(11,'PiYG')))(32)
+Map_point_kde_nomask <- ggplot() + 
+  geom_sf() + 
+  geom_tile(data = G1_no_na,aes(Longitude, Latitude, fill = predictions))+
+  scale_fill_gradientn(colours = my_colormap)+
+  labs(colour = "Predicted Rs") +
+  theme(
+        panel.grid=element_blank(), 
+        panel.background=element_blank(),
+        panel.border = element_rect(linetype = "solid", linewidth = 1,fill = NA),
+        #legend.position = c(0.11,0.3)
+        )
+
+Map_point_kde_nomask
+
+my_colormap <- colorRampPalette(rev(brewer.pal(9,'Oranges')))(32)
+Map_point_kde_nomask <- ggplot() + 
+  geom_sf() + 
+  geom_tile(data = G1_no_na,aes(Longitude, Latitude, fill = predictions))+
+  scale_fill_gradientn(colours = my_colormap)+
+  labs(colour = "Predicted Rs") +
+  theme(
+        panel.grid=element_blank(), 
+        panel.background=element_blank(),
+        panel.border = element_rect(linetype = "solid", linewidth = 1,fill = NA),
+        #legend.position = c(0.11,0.3)
+        )
+
+Map_point_kde_nomask
+
+GIA$prediction <- predict(modIA, GIA)
+GIB$prediction <- predict(modIB, GIB)
+GIC$prediction <- predict(modIC, GIC)
+GID$prediction <- predict(modID, GID)
+GIE$prediction <- predict(modIE, GIE)
+
+mean(GIA$prediction,na.rm = T)
+mean(GIB$prediction,na.rm = T)
+mean(GIC$prediction,na.rm = T)
+mean(GID$prediction,na.rm = T)
+mean(GIE$prediction,na.rm = T)
+
+GIA$prediction1 <- predict(mod1, GIA)
+GIB$prediction1 <- predict(mod1, GIB)
+GIC$prediction1 <- predict(mod1, GIC)
+GID$prediction1 <- predict(mod1, GID)
+GIE$prediction1 <- predict(mod1, GIE)
+
+
+globalDataIABC <-rbind(GIA,GIB,GIC,GID,GIE)
+
+mean(globalDataIABC$prediction,na.rm = T)
+mean(globalDataIABC$prediction1,na.rm = T)
+
+
+globalData<-data.frame(globalData)
+globalData<-globalData[order(globalData$...1),]
+
+
+globalDataIABC<-data.frame(globalDataIABC)
+globalDataIABC<-globalDataIABC[order(globalDataIABC$...1),]
+
+GIABC1 <- subset(globalDataIABC, Measure_Month==1 )
+GIABC2 <- subset(globalDataIABC, Measure_Month==2 )
+GIABC3 <- subset(globalDataIABC, Measure_Month==3 )
+GIABC4 <- subset(globalDataIABC, Measure_Month==4 )
+GIABC5 <- subset(globalDataIABC, Measure_Month==5 )
+GIABC6 <- subset(globalDataIABC, Measure_Month==6 )
+GIABC7 <- subset(globalDataIABC, Measure_Month==7 )
+GIABC8 <- subset(globalDataIABC, Measure_Month==8 )
+GIABC9 <- subset(globalDataIABC, Measure_Month==9 )
+GIABC10 <- subset(globalDataIABC, Measure_Month==10 )
+GIABC11 <- subset(globalDataIABC, Measure_Month==11 )
+GIABC12 <- subset(globalDataIABC, Measure_Month==12 )
+
+
+GIABC1$Predicted_Rs <-(GIABC1$prediction+GIABC2$prediction+GIABC3$prediction+GIABC4$prediction+GIABC5$prediction+GIABC6$prediction
++GIABC7$prediction+GIABC8$prediction+GIABC9$prediction+GIABC10$prediction+GIABC11$prediction)/11#+G12$prediction
+
+GIABC1$predictions <-(GIABC1$prediction+GIABC2$prediction+GIABC3$prediction+GIABC4$prediction+GIABC5$prediction+GIABC6$prediction
++GIABC7$prediction+GIABC8$prediction+GIABC9$prediction+GIABC10$prediction+GIABC11$prediction)/11#+G12$prediction
+
+GIABC1_no_na <- GIABC1[!is.na(GIABC1$predictions), ]
+
+write.csv(GIABC1_no_na,"GIABC1_no_na.csv")
+
+ggplot(GIABC1_no_na, aes(Longitude, Latitude, color = predictions)) +
+  scale_colour_steps(low = "white", high = "#006400", n.breaks=8)+
+  geom_point(size = 0.3) +
+  lims(x = c(-180, 180), y = c(-90, 90)) +
+  labs(color = "Predicted Rs") +
+  theme(
+        panel.grid=element_blank(), 
+        panel.background=element_blank(),
+        panel.border = element_rect(linetype = "solid", linewidth = 1,fill = NA),
+        legend.position = c(0.11,0.3)
+        )
+
+my_colormap <- colorRampPalette(rev(brewer.pal(9,'GnBu')))(32)
+GIABC <- ggplot() + 
+  geom_sf() + 
+  geom_tile(data =GIABC1_no_na,aes(Longitude, Latitude, fill = predictions))+
+  scale_fill_gradientn(colours = my_colormap)+
+  theme(
+        panel.grid=element_blank(), 
+        panel.background=element_blank(),
+        panel.border = element_rect(linetype = "solid", linewidth = 1,fill = NA),
+        #legend.position = c(0.11,0.3)
+        )+labs(colour = "Predicted Rs") 
+GIABC
+#GIABC1$predictions <-data.frame(GIABC1$predictions)
+#G1$predictions <-data.frame(G1$predictions)
+GIABC1$predictionI1 <- (GIABC1$predictions-G1$predictions)/G1$predictions
+GIABCI1_no_na <- GIABC1[!is.na(GIABC1$predictionI1), ]
+
+ggplot(GIABCI1_no_na, aes(Longitude, Latitude, color = predictionI1)) + 
+  scale_colour_steps2(low = "#984EA3",mid="white" ,high = "#386CB0",n.breaks=8)+
+  geom_point(size = 0.3) +
+  lims(x = c(-180, 180), y = c(-90, 90)) +
+  labs(color = "RC prediction")  +labs(color = "Predicted Rs") +
+  theme(
+        panel.grid=element_blank(), 
+        panel.background=element_blank(),
+        panel.border = element_rect(linetype = "solid", linewidth = 1,fill = NA),
+        legend.position = c(0.11,0.3))
+        
+#mean(globalData$prediction,na.rm = T)
+#globalData <- globalData[complete.cases(globalData),]
+G7 <- subset(globalData, Measure_Month==7 )
+theme_update(plot.title = element_text(hjust = 0.5))
+
+GI7 <- subset(globalDataIABC, Measure_Month==7 )
+theme_update(plot.title = element_text(hjust = 0.5))
+
+# 设置色带
+#cols <- c("#FBF8EB", "#F2E49B", "#CAE784", "#1D934D", "#CE6BBB")
+# 在计算分位数之前排除包含缺失值的观测
+G7_no_na <- G7[!is.na(G7 $prediction), ]
+# 定义分位数值，可以根据需要进行调整
+#quantiles <- quantile(G7_no_na$prediction, probs = c(0, 0.25, 0.5, 0.75, 1))
+# 绘图
+
+ggplot(G7, aes(Longitude, Latitude, color = prediction)) + 
+  geom_point(size = 0.3) +
+  lims(x = c(-180, 180), y = c(-90, 90)) +
+  labs(color = "RC prediction") +
+  scale_color_viridis_c()+theme(
+        panel.grid=element_blank(), 
+        #panel.background=element_blank()
+        #panel.border = element_rect(linetype = "solid", linewidth = 1,fill = NA))
+  )
+
+G7_no_na <-data.frame(G7_no_na)
+ggplot(G7_no_na, aes(Longitude, Latitude, colour = prediction)) + 
+  scale_colour_steps(low = "white", high = "red", n.breaks=5)+
+  geom_point(size = 0.3) +
+  lims(x = c(-180, 180), y = c(-90, 90)) +
+ labs(color = "RC prediction")+ #+ scale_color_viridis_c(option = "B")
+  #theme(panel.grid=element_blank()) +
+  #geom_text(mapping = aes(label = round(pergdp,2)), size = 3, hjust = -0.3)+
+  #scale_y_continuous(limits = c(0,35),expand = c(0,0))+
+  theme_bw()
+  #scale_fill_gradientn(colours = cols, values = scales::rescale(quantiles))+theme_classic()
+        #panel.background=element_blank()
+        #panel.border = element_rect(linetype = "solid", linewidth = 1,fill = NA))
+ 
+
+ggplot(GI7, aes(Longitude, Latitude, color = prediction)) + 
+  geom_point(size = 0.3) +
+  lims(x = c(-180, 180), y = c(-90, 90)) +
+  labs(color = "RC prediction") +
+  scale_color_viridis_c()+theme(
+        panel.grid=element_blank(), 
+        #panel.background=element_blank()
+        #panel.border = element_rect(linetype = "solid", linewidth = 1,fill = NA))
+  )
+GI7$predictionI <- (GI7$prediction-G7$prediction)/G7$prediction
+ggplot(GI7, aes(Longitude, Latitude, color = predictionI)) + 
+  scale_colour_steps(low = "#386CB0", high = "red",n.breaks=5)+
+  geom_point(size = 0.3) +
+  lims(x = c(-180, 180), y = c(-90, 90)) +
+  labs(color = "RC prediction") 
+  #scale_color_viridis_c()+theme(
+        #panel.grid=element_blank(), 
+        #panel.background=element_blank()
+        #panel.border = element_rect(linetype = "solid", linewidth = 1,fill = NA))
+  
+#ggplot(globalData, aes(x = Longitude, y = Latitude)) +
+#  geom_point(size = 0.3) +
+#  lims(x = c(-180, 180), y = c(-90, 90))
+
+# Get rid of points with missing warner Rs, myco, and climate data
+#globalData <- globalData[complete.cases(globalData),]
+
+globalDataD<-subset(G7, G7$TopClimate=="D")
+#globalDataD <-filter(globalData, TopClimate %in% globalDataD$TopClimate)
+GA10 <-subset(globalDataD,Measure_Month==10)
+GA10 <- data.frame(GA10)
+
+mean(globalDataD$prediction,na.rm = T)
+
+library(ggplot2)
+library(plyr)
+library(maptools)
+library(sp)
+
+mapWorld <- borders("world", colour="gray60", fill="#DCDCDC") # create a layer of borders
+#m <-ggplot()+ theme_bw()+ mapWorld
+#m
+
+mp <- ggplot(data = globalDataD, aes(Longitude, Latitude, color = prediction))+       
+  theme_bw() +  mapWorld + 
+  geom_point(size = 0.3) +
+  #lims(x = c(-180, 180), y = c(-90, 90))+ 
+  labs(color = "RC prediction") +
+  scale_color_viridis_c()+scale_x_continuous(breaks = seq(-100,100,100))
+
+mp
+
+ggplot(GA10, aes(Longitude, Latitude, color = prediction)) + 
+  geom_point(size = 0.3) +
+  lims(x = c(-180, 180), y = c(-90, 90))+ 
+  labs(color = "RC prediction") +
+  scale_color_viridis_c()
+# Look at the distribution of predictions
+
+ggplot(G7, aes(x = prediction)) +
+  geom_histogram(color = "black", fill = "lightgrey") +
+  labs(x = "RC Prediction")
+
+my_colormap <- colorRampPalette(rev(brewer.pal(11,'Spectral')))(32)
+Map <- ggplot() + 
+  geom_sf() + 
+  geom_tile(data = G1_no_na,aes(Longitude, Latitude, fill = Predicted_Rs))+
+  scale_fill_gradientn(colours = my_colormap)+
+  theme(
+        panel.grid=element_blank(), 
+        panel.background=element_blank(),
+        panel.border = element_rect(linetype = "solid", linewidth = 1,fill = NA),
+        #legend.position = c(0.11,0.3)
+        )+labs(colour = "Predicted Rs") 
+Map <-Map+ annotate("text", x = -150 , y = -10,label= ("Single global model"),size = 3)+ annotate("text", x = -150 , y = -19,label= ("Global Mean Rs"),size = 3)+ annotate("text", x = -150 , y = -28,label= expression(paste("1.75"," ",g," ","C"," ", m^-2," ", "day"^-1)),size = 3)
+
+Map
+
+my_colormap <- colorRampPalette(rev(brewer.pal(11,'Spectral')))(32)
+GIABC <- ggplot() + 
+  geom_sf() + 
+  geom_tile(data =GIABC1_no_na,aes(Longitude, Latitude, fill = Predicted_Rs))+
+  scale_fill_gradientn(colours = my_colormap)+
+  theme(
+        panel.grid=element_blank(), 
+        panel.background=element_blank(),
+        panel.border = element_rect(linetype = "solid", linewidth = 1,fill = NA),
+        #legend.position = c(0.11,0.3)
+        )+labs(colour = "Predicted Rs") 
+GIABC<-GIABC+ annotate("text", x = -150 , y = -10,label= ("Land cover model"),size = 3)+ annotate("text", x = -150 , y = -19,label= ("Global Mean Rs"),size = 3)+ annotate("text", x = -150 , y = -28,label= expression(paste("1.58"," ",g," ","C"," ", m^-2," ", "day"^-1)),size = 3)
+
+GIABC
+
+GIABC1$Uncertainty <- (GIABC1$Predicted_Rs-G1$Predicted_Rs)/G1$Predicted_Rs
+GIABC1_no_na <- GIABC1[!is.na(GIABC1$Uncertainty), ]
+
+mean(GIABC1$Uncertainty,na.rm = T)
+
+my_colormap <- colorRampPalette(rev(brewer.pal(11,'BrBG')))(32)
+GIABCU <- ggplot() + 
+  geom_sf() + 
+  geom_tile(data =GIABC1_no_na,aes(Longitude, Latitude, fill = Uncertainty))+
+  scale_fill_gradientn(colours = my_colormap,n.breaks=7,limits=c(-1,1))+
+  theme(
+        panel.grid=element_blank(), 
+        panel.background=element_blank(),
+        panel.border = element_rect(linetype = "solid", linewidth = 1,fill = NA),
+        #legend.position = c(0.11,0.3)
+        )+labs(colour = "Predicted Rs") 
+GIABCU<-GIABCU+ annotate("text", x = -150 , y = -10,label= ("Single global model"),size = 3)+ annotate("text", x = -150 , y = -18,label= ("vs."),size = 3)+ annotate("text", x = -150 , y = -26,label= ("Land cover model"),size = 3)
+GIABCU
+
+#library(patchwork)
+#GABCR/GIABC|GYHR/GLMHR
+
+```
+
+
+
+```{r}
+set.seed (556)
+
+modA <- randomForest(Rs_Norm ~ P_LastMonth   +  Measure_Month + #TS + 
+                         Pm + Tm + Latitude +absLog + Climate_Koeppon 
+                         + T_LastMonth
+                       + LAI  + Elevation+ IGBP , data=TrainSetA, 
+                       keep.inbag=TRUE, mtry=5, importance=TRUE, ntree=1000)
+
+
+
+#The summary of the Standard Random Forest model
+modA
+#Variable impor1tance measures
+importance (modA)
+#Looking at the OOB error reduction with the tree size
+plot (modA) 
+#Plotting the variable importance
+varImpPlot(modA)
+
+
+prediction.vaA <- predict(modA, ValidSetA) #predict w/ validation 
+
+#Compare correlation b/w validation predictions and observations
+cor.test(prediction.vaA, ValidSetA$Rs_Norm, method = "pearson", alpha=.05)
+
+VaA <- cbind(prediction.vaA, ValidSetA)
+names(VaA)[1] <- "Prediction"
+
+valA <- lm(Rs_Norm~Prediction, data=VaA)
+summary(valA)
+
+set.seed (556)
+
+modB <- randomForest(Rs_Norm ~ P_LastMonth   + Measure_Month + #TS + 
+                         Pm + Tm + Latitude +absLog + Climate_Koeppon 
+                         + T_LastMonth
+                       + LAI + IGBP + Elevation , data=TrainSetB, 
+                       keep.inbag=TRUE, mtry=5, importance=TRUE, ntree=1000)
+
+
+
+#The summary of the Standard Random Forest model
+modB
+#Variable impor1tance measures
+importance (modB)
+#Looking at the OOB error reduction with the tree size
+plot (modB) 
+#Plotting the variable importance
+varImpPlot(modB)
+
+
+prediction.vaB <- predict(modB, ValidSetB) #predict w/ validation 
+
+#Compare correlation b/w validation predictions and observations
+cor.test(prediction.vaB, ValidSetB$Rs_Norm, method = "pearson", alpha=.05)
+
+VaB <- cbind(prediction.vaB, ValidSetB)
+names(VaB)[1] <- "Prediction"
+
+valB <- lm(Rs_Norm~Prediction, data=VaB)
+summary(valB)
+
+set.seed (556)
+
+modC <- randomForest(Rs_Norm ~ P_LastMonth   + Measure_Month + #TS + + IGBP
+                         Pm + Tm + Latitude +absLog + Climate_Koeppon 
+                         + T_LastMonth
+                       + LAI  + Elevation+ IGBP  , data=TrainSetC, 
+                       keep.inbag=TRUE, mtry=5, importance=TRUE, ntree=1000)
+
+
+
+#The summary of the Standard Random Forest model
+modC
+#Variable impor1tance measures
+importance (modC)
+#Looking at the OOB error reduction with the tree size
+plot (modC) 
+#Plotting the variable importance
+varImpPlot(modC)
+
+
+prediction.vaC <- predict(modC, ValidSetC) #predict w/ validation 
+
+#Compare correlation b/w validation predictions and observations
+cor.test(prediction.vaC, ValidSetC$Rs_Norm, method = "pearson", alpha=.05)
+
+VaC <- cbind(prediction.vaC, ValidSetC)
+names(VaC)[1] <- "Prediction"
+
+valC <- lm(Rs_Norm~Prediction, data=VaC)
+summary(valC)
+
+set.seed (556)
+
+modD <- randomForest(Rs_Norm ~ P_LastMonth   + Measure_Month + #TS + + IGBP
+                         Pm + Tm + Latitude +absLog + Climate_Koeppon 
+                         + T_LastMonth
+                       + LAI  + Elevation+ IGBP  , data=TrainSetD, 
+                       keep.inbag=TRUE, mtry=5, importance=TRUE, ntree=1000)
+
+
+
+#The summary of the Standard Random Forest model
+modD
+#Variable impor1tance measures
+importance (modD)
+#Looking at the OOB error reduction with the tree size
+plot (modD) 
+#Plotting the variable importance
+varImpPlot(modD)
+
+
+prediction.vaD <- predict(modD, ValidSetD) #predict w/ validation 
+
+#Compare correlation b/w validation predictions and observations
+cor.test(prediction.vaD, ValidSetD$Rs_Norm, method = "pearson", alpha=.05)
+
+VaD <- cbind(prediction.vaD, ValidSetD)
+names(VaD)[1] <- "Prediction"
+
+valD <- lm(Rs_Norm~Prediction, data=VaD)
+summary(valD)
+
+set.seed (556)
+
+modE <- randomForest(Rs_Norm ~ P_LastMonth   + Measure_Month + #TS + + IGBP
+                         Pm + Tm + Latitude +absLog + Climate_Koeppon 
+                         + T_LastMonth
+                         + LAI + Elevation+ IGBP , data=TrainSetE, 
+                       keep.inbag=TRUE, mtry=5, importance=TRUE, ntree=1000)
+
+
+
+#The summary of the Standard Random Forest model
+modE
+#Variable impor1tance measures
+importance (modE)
+#Looking at the OOB error reduction with the tree size
+plot (modE) 
+#Plotting the variable importance
+varImpPlot(modE)
+
+
+prediction.vaE <- predict(modE, ValidSetE) #predict w/ validation 
+
+#Compare correlation b/w validation predictions and observations
+cor.test(prediction.vaE, ValidSetE$Rs_Norm, method = "pearson", alpha=.05)
+
+VaE <- cbind(prediction.vaE, ValidSetE)
+names(VaE)[1] <- "Prediction"
+
+valE <- lm(Rs_Norm~Prediction, data=VaE)
+summary(valE)
+
+#CK<-TrainSet$Climate_Koeppon
+#head(CK)
+#K<-globalData$IGBP
+#head(K)
+
+mean(VaA$Prediction,na.rm = T)
+mean(VaB$Prediction,na.rm = T)
+mean(VaC$Prediction,na.rm = T)
+mean(VaD$Prediction,na.rm = T)
+mean(VaE$Prediction,na.rm = T)
+
+vaABC <- rbind(VaA, VaB,VaC,VaD,VaE)
+names(vaABC)[1] <- "Prediction"
+
+valABC <- lm(Rs_Norm~Prediction, data=vaABC)
+summary(valABC)
+
+cor.test(vaABC$Prediction, vaABC$Rs_Norm, method = "spearman", alpha=.05)
+
+mean(vaABC$Prediction,na.rm = T)
+
+rmse <- sqrt(mean((vaABC$Prediction - vaABC$Rs_Norm )^2))
+rmse
+# 计算观测值数量
+n <- length(vaABC$Rs_Norm)
+
+# 计算每个观测值的差异，并求平方
+diff <- vaABC$Prediction - vaABC$Rs_Norm
+squared_diff <- diff^2
+
+e <- 1-((sum(squared_diff))/sum((vaABC$Rs_Norm - mean(vaABC$Rs_Norm))^2))
+e
+# 计算MSE
+mse <- sum(squared_diff) / n
+
+# 打印结果
+print(mse)
+
+AIC(val, valABC)
+
+
+A <- subset(globalData, TopClimate == "A" )
+B <- subset(globalData, TopClimate == "B" )
+C <- subset(globalData, TopClimate == "C" )
+D <- subset(globalData, TopClimate == "D" )
+E <- subset(globalData, TopClimate == "E" )
+
+#globalData <- globalData[complete.cases(globalData),]
+globalData$prediction <- predict(mod1, globalData)
+
+mean(globalData$prediction,na.rm = T)
+
+A$prediction <- predict(modA, A)
+B$prediction <- predict(modB, B)
+C$prediction <- predict(modC, C)
+D$prediction <- predict(modD, D)
+E$prediction <- predict(modE, E)
+
+mean(A$prediction,na.rm = T)
+mean(B$prediction,na.rm = T)
+mean(C$prediction,na.rm = T)
+mean(D$prediction,na.rm = T)
+mean(E$prediction,na.rm = T)
+
+globalDataABC <-rbind(A,B,C,D,E)
+
+mean(globalDataABC$prediction,na.rm = T)
+
+
+
+mean(globalDataABC$prediction,na.rm = T)
+#mean(globalDataABC$prediction1,na.rm = T)
+
+
+globalData<-data.frame(globalData)
+globalData<-globalData[order(globalData$...1),]
+
+
+globalDataABC<-data.frame(globalDataABC)
+globalDataABC<-globalDataABC[order(globalDataABC$...1),]
+
+
+#mean(globalData$prediction,na.rm = T)
+#globalData <- globalData[complete.cases(globalData),]
+
+G77 <- subset(globalDataABC, Measure_Month==7 )
+theme_update(plot.title = element_text(hjust = 0.5))
+
+# 设置色带
+#cols <- c("#FBF8EB", "#F2E49B", "#CAE784", "#1D934D", "#CE6BBB")
+# 在计算分位数之前排除包含缺失值的观测
+G77_no_na <- G77[!is.na(G77 $prediction), ]
+# 定义分位数值，可以根据需要进行调整
+#quantiles <- quantile(G7_no_na$prediction, probs = c(0, 0.25, 0.5, 0.75, 1))
+# 绘图
+
+ggplot(G77_no_na, aes(Longitude, Latitude, color = prediction)) + 
+  geom_point(size = 0.3) +
+  lims(x = c(-180, 180), y = c(-90, 90)) +
+  labs(color = "RC prediction") +
+  scale_color_viridis_c()+theme(
+        panel.grid=element_blank(), 
+        #panel.background=element_blank()
+        #panel.border = element_rect(linetype = "solid", linewidth = 1,fill = NA))
+  )
+
+
+GABC1 <- subset(globalDataABC, Measure_Month==1 )
+GABC2 <- subset(globalDataABC, Measure_Month==2 )
+GABC3 <- subset(globalDataABC, Measure_Month==3 )
+GABC4 <- subset(globalDataABC, Measure_Month==4 )
+GABC5 <- subset(globalDataABC, Measure_Month==5 )
+GABC6 <- subset(globalDataABC, Measure_Month==6 )
+GABC7 <- subset(globalDataABC, Measure_Month==7 )
+GABC8 <- subset(globalDataABC, Measure_Month==8 )
+GABC9 <- subset(globalDataABC, Measure_Month==9 )
+GABC10 <- subset(globalDataABC, Measure_Month==10 )
+GABC11 <- subset(globalDataABC, Measure_Month==11 )
+GABC12 <- subset(globalDataABC, Measure_Month==12 )
+
+
+GABC1$Predicted_Rs <-(GABC1$prediction+GABC2$prediction+GABC3$prediction+GABC4$prediction+GABC5$prediction+GABC6$prediction+GABC7$prediction+GABC8$prediction+GABC9$prediction+GABC10$prediction+GABC11$prediction)/11#+G12$prediction
+
+GABC1$predictions <-(GABC1$prediction+GABC2$prediction+GABC3$prediction+GABC4$prediction+GABC5$prediction+GABC6$prediction+GABC7$prediction+GABC8$prediction+GABC9$prediction+GABC10$prediction+GABC11$prediction)/11#+G12$prediction
+
+W<-expression(paste("Predicted Rs"," ","(",g," ","C"," ", m^-2," ", "day"^-1,")"))
+GABC1_no_na <- GABC1[!is.na(GABC1 $predictions), ]
+write.csv(GABC1_no_na,"GABC1_no_na.csv")
+ggplot(GABC1_no_na, aes(Longitude, Latitude, color = predictions)) +
+  scale_colour_steps(low = "white", high = "#006400", n.breaks=8)+
+  geom_point(size = 0.3) +
+  lims(x = c(-180, 180), y = c(-90, 90)) +
+  labs(color = "Predicted Rs") +
+  theme(
+        panel.grid=element_blank(), 
+        panel.background=element_blank(),
+        panel.border = element_rect(linetype = "solid", linewidth = 1,fill = NA),
+        legend.position = c(0.11,0.3)
+        )
+  
+  
+ 
+ 
+  
+
+ggplot(GABC1_no_na, aes(Longitude, Latitude, color = predictions)) + 
+  geom_point(size = 0.3) +
+  lims(x = c(-180, 180), y = c(-90, 90)) +
+  labs(color = "RC prediction") +
+  scale_color_viridis_c()+theme(
+        panel.grid=element_blank(), 
+        #panel.background=element_blank()
+        #panel.border = element_rect(linetype = "solid", linewidth = 1,fill = NA))
+  )
+
+my_colormap <- colorRampPalette(rev(brewer.pal(11,'Spectral')))(32)
+GABCR <- ggplot() + 
+  geom_sf() + 
+  geom_tile(data = GABC1_no_na,aes(Longitude, Latitude, fill = Predicted_Rs))+
+  scale_fill_gradientn(colours = my_colormap,breaks=c(0.5,1.5,2.5,3.5,4.5,5.5))+
+  theme(
+        panel.grid=element_blank(), 
+        panel.background=element_blank(),
+        panel.border = element_rect(linetype = "solid", linewidth = 1,fill = NA),
+        #legend.position = c(0.11,0.3)
+        )+labs(colour = "Predicted Rs") 
+GABCR<-GABCR+ annotate("text", x = -150 , y = -10,label= ("Climate model"),size = 3)+ annotate("text", x = -150 , y = -19,label= ("Global Mean Rs"),size = 3)+ annotate("text", x = -150 , y = -28,label= expression(paste("2.00"," ",g," ","C"," ", m^-2," ", "day"^-1)),size = 3)
+GABCR
+
+GABC1$Uncertainty <- (GABC1$Predicted_Rs-G1$Predicted_Rs)/G1$Predicted_Rs
+GABC1_no_na <- GABC1[!is.na(GABC1$Uncertainty), ]
+
+mean(GABC1$Uncertainty,na.rm = T)
+my_colormap <- colorRampPalette(rev(brewer.pal(11,'BrBG')))(32)
+GABCU <- ggplot() + 
+  geom_sf() + 
+  geom_tile(data =GABC1_no_na,aes(Longitude, Latitude, fill = Uncertainty))+
+  scale_fill_gradientn(colours = my_colormap,n.breaks=7,limits=c(-1,1))+labs( "Predicted Rs")+
+  theme(
+        panel.grid=element_blank(), 
+        panel.background=element_blank(),
+        panel.border = element_rect(linetype = "solid", linewidth = 1,fill = NA),
+        #legend.position = c(0.11,0.3)
+        ) 
+#GABCU<-GABCU+ annotate("text", x = -120 , y = -20,label= expression(paste("Global mean Rs"," ","(",g," ","C"," ", m^-2," ", "day"^-1,")")))
+
+GABCU <-GABCU+ annotate("text", x = -150 , y = -10,label= ("Single global model"),size = 3)+ annotate("text", x = -150 , y = -18,label= ("vs."),size = 3)+ annotate("text", x = -150 , y = -26,label= ("Climate model"),size = 3)
+
+GABCU
+```
+
+
+
+
+
+```{r}
+set.seed (556)
+
+modL <- randomForest(Rs_Norm ~ P_LastMonth   + Measure_Month + #TS + + IGBP
+                         Pm + Tm + Latitude +absLog + Climate_Koeppon + T_LastMonth
+                       + LAI  + Elevation+ IGBP , data=TrainSetL, 
+                       keep.inbag=TRUE, mtry=5, importance=TRUE, ntree=1000)
+
+
+
+#The summary of the Standard Random Forest model
+modL
+#Variable impor1tance measures
+importance (modL)
+#Looking at the OOB error reduction with the tree size
+plot (modL) 
+#Plotting the variable importance
+varImpPlot(modL)
+
+
+prediction.vaL <- predict(modL, ValidSetL) #predict w/ validation 
+
+#Compare correlation b/w validation predictions and observations
+cor.test(prediction.vaL, ValidSetL$Rs_Norm, method = "pearson", alpha=.05)
+
+VaL <- cbind(prediction.vaL, ValidSetL)
+names(VaL)[1] <- "Prediction"
+
+valL <- lm(Rs_Norm~Prediction, data=VaL)
+summary(valL)
+
+set.seed (556)
+
+modH <- randomForest(Rs_Norm ~  Measure_Month  #+TS  + IGBP
+                          +P_LastMonth   +Pm
+                          + Tm + Latitude +absLog + Climate_Koeppon + T_LastMonth
+                       + LAI  + Elevation+ IGBP , data=TrainSetH, 
+                       keep.inbag=TRUE, mtry=5, importance=TRUE, ntree=1000)
+
+
+
+#The summary of the Standard Random Forest model
+modH
+#Variable impor1tance measures
+importance (modH)
+#Looking at the OOB error reduction with the tree size
+plot (modH) 
+#Plotting the variable importance
+varImpPlot(modH)
+
+
+prediction.vaH <- predict(modH, ValidSetH) #predict w/ validation 
+
+#Compare correlation b/w validation predictions and observations
+cor.test(prediction.vaH, ValidSetH$Rs_Norm, method = "pearson", alpha=.05)
+
+VaH <- cbind(prediction.vaH, ValidSetH)
+names(VaH)[1] <- "Prediction"
+
+valH <- lm(Rs_Norm~Prediction, data=VaH)
+summary(valH)
+
+set.seed (556)
+
+modM <- randomForest(Rs_Norm ~  Measure_Month  #+TS  + IGBP
+                           +P_LastMonth   +Pm
+                          + Tm + Latitude +absLog + Climate_Koeppon + T_LastMonth
+                       + LAI  + Elevation+ IGBP , data=TrainSetM, 
+                       keep.inbag=TRUE, mtry=5, importance=TRUE, ntree=1000)
+
+
+
+#The summary of the Standard Random Forest model
+modM
+#Variable impor1tance measures
+importance (modM)
+#Looking at the OOB error reduction with the tree size
+plot (modM) 
+#Plotting the variable importance
+varImpPlot(modM)
+
+
+prediction.vaM <- predict(modM, ValidSetM) #predict w/ validation 
+
+#Compare correlation b/w validation predictions and observations
+cor.test(prediction.vaM, ValidSetM$Rs_Norm, method = "pearson", alpha=.05)
+
+VaM <- cbind(prediction.vaM, ValidSetM)
+names(VaM)[1] <- "Prediction"
+
+valM <- lm(Rs_Norm~Prediction, data=VaM)
+summary(valM)
+
+
+vaLMH <- rbind(VaL, VaM,VaH)
+names(vaLMH)[1] <- "Prediction"
+
+valLMH <- lm(Rs_Norm~Prediction, data=vaLMH)
+summary(valLMH)
+
+cor.test(vaLMH$Prediction, vaLMH$Rs_Norm, method = "spearman", alpha=.05)
+
+mean(vaLMH$Prediction,na.rm = T)
+
+rmse <- sqrt(mean((vaLMH$Prediction - vaLMH$Rs_Norm )^2))
+rmse
+# 计算观测值数量
+n <- length(vaLMH$Rs_Norm)
+
+# 计算每个观测值的差异，并求平方
+diff <- vaLMH$Prediction - vaLMH$Rs_Norm
+squared_diff <- diff^2
+
+# 计算MSE
+mse <- sum(squared_diff) / n
+
+e <- 1-((sum(squared_diff))/sum((vaLMH$Rs_Norm - mean(vaLMH$Rs_Norm))^2))
+e
+# 打印结果
+print(mse)
+
+AIC(val, valLMH)
+
+globalDataL <- subset(globalData, globalData$Elevation < 500 )
+globalDataM <- subset(globalData, globalData$Elevation >= 500 & globalData$Elevation <1500 )
+globalDataH <- subset(globalData, globalData$Elevation >=1500 )
+
+#A <- subset(globalData, TopClimate == "A" )
+#B <- subset(globalData, TopClimate == "B" )
+#C <- subset(globalData, TopClimate == "C" )
+#D <- subset(globalData, TopClimate == "D" )
+#E <- subset(globalData, TopClimate == "E" )
+
+#globalData <- globalData[complete.cases(globalData),]
+globalData$prediction <- predict(mod1, globalData)
+
+mean(globalData$prediction,na.rm = T)
+
+globalDataL$prediction <- predict(modL, globalDataL)
+globalDataM$prediction <- predict(modM, globalDataM)
+globalDataH$prediction <- predict(modH, globalDataH)
+
+mean(globalDataL$prediction,na.rm = T)
+mean(globalDataM$prediction,na.rm = T)
+mean(globalDataH$prediction,na.rm = T)
+
+globalDataLMH <-rbind(globalDataL,globalDataM,globalDataH)
+
+mean(globalDataLMH$prediction,na.rm = T)
+
+
+globalData<-data.frame(globalData)
+globalData<-globalData[order(globalData$...1),]
+
+
+globalDataLMH<-data.frame(globalDataLMH)
+globalDataLMH<-globalDataLMH[order(globalDataLMH$...1),]
+
+
+#mean(globalData$prediction,na.rm = T)
+#globalData <- globalData[complete.cases(globalData),]
+
+GL7 <- subset(globalDataLMH, Measure_Month==7 )
+theme_update(plot.title = element_text(hjust = 0.5))
+
+# 设置色带
+#cols <- c("#FBF8EB", "#F2E49B", "#CAE784", "#1D934D", "#CE6BBB")
+# 在计算分位数之前排除包含缺失值的观测
+GL7_no_na <- GL7[!is.na(GL7 $prediction), ]
+# 定义分位数值，可以根据需要进行调整
+#quantiles <- quantile(G7_no_na$prediction, probs = c(0, 0.25, 0.5, 0.75, 1))
+# 绘图
+
+ggplot(GL7_no_na, aes(Longitude, Latitude, color = prediction)) + 
+  geom_point(size = 0.3) +
+  lims(x = c(-180, 180), y = c(-90, 90)) +
+  labs(color = "RC prediction") +
+  scale_color_viridis_c()+theme(
+        panel.grid=element_blank(), 
+        #panel.background=element_blank()
+        #panel.border = element_rect(linetype = "solid", linewidth = 1,fill = NA))
+  )
+
+GLMH1 <- subset(globalDataLMH, Measure_Month==1 )
+GLMH2 <- subset(globalDataLMH, Measure_Month==2 )
+GLMH3 <- subset(globalDataLMH, Measure_Month==3 )
+GLMH4 <- subset(globalDataLMH, Measure_Month==4 )
+GLMH5 <- subset(globalDataLMH, Measure_Month==5 )
+GLMH6 <- subset(globalDataLMH, Measure_Month==6 )
+GLMH7 <- subset(globalDataLMH, Measure_Month==7 )
+GLMH8 <- subset(globalDataLMH, Measure_Month==8 )
+GLMH9 <- subset(globalDataLMH, Measure_Month==9 )
+GLMH10 <- subset(globalDataLMH, Measure_Month==10 )
+GLMH11 <- subset(globalDataLMH, Measure_Month==11 )
+GLMH12 <- subset(globalDataLMH, Measure_Month==12 )
+
+
+GLMH1$Predicted_Rs <-(GLMH1$prediction+GLMH2$prediction+GLMH3$prediction+GLMH4$prediction+GLMH5$prediction+GLMH6$prediction+GLMH7$prediction+GLMH8$prediction+GLMH9$prediction+GLMH10$prediction+GLMH11$prediction)/11#+G12$prediction
+
+GLMH1$predictions <-(GLMH1$prediction+GLMH2$prediction+GLMH3$prediction+GLMH4$prediction+GLMH5$prediction+GLMH6$prediction+GLMH7$prediction+GLMH8$prediction+GLMH9$prediction+GLMH10$prediction+GLMH11$prediction)/11#+G12$prediction
+
+GLMH1_no_na <- GLMH1[!is.na(GLMH1 $predictions), ]
+write.csv(GLMH1_no_na,"GLMH1_no_na.csv")
+ggplot(GLMH1_no_na, aes(Longitude, Latitude, color = predictions)) +
+  scale_colour_steps(low = "white", high = "#006400", n.breaks=8)+
+  geom_point(size = 0.3) +
+  lims(x = c(-180, 180), y = c(-90, 90)) +
+  labs(color = "Predicted Rs") +
+  theme(
+        panel.grid=element_blank(), 
+        panel.background=element_blank(),
+        panel.border = element_rect(linetype = "solid", linewidth = 1,fill = NA),
+        legend.position = c(0.12,0.3)
+        )
+
+ggplot(GLMH1_no_na, aes(Longitude, Latitude, color = predictions)) + 
+  geom_point(size = 0.3) +
+  lims(x = c(-180, 180), y = c(-90, 90)) +
+  labs(color = "RC prediction") +
+  scale_color_viridis_c()+theme(
+        panel.grid=element_blank(), 
+        #panel.background=element_blank()
+        #panel.border = element_rect(linetype = "solid", linewidth = 1,fill = NA))
+  )
+
+my_colormap <- colorRampPalette(rev(brewer.pal(11,'Spectral')))(32)
+GLMHR <- ggplot() + 
+  geom_sf() + 
+  geom_tile(data = GLMH1_no_na,aes(Longitude, Latitude, fill = Predicted_Rs))+
+  scale_fill_gradientn(colours = my_colormap)+
+  theme(
+        panel.grid=element_blank(), 
+        panel.background=element_blank(),
+        panel.border = element_rect(linetype = "solid", linewidth = 1,fill = NA),
+        #legend.position = c(0.11,0.3)
+        )+labs(colour = "Predicted Rs") 
+GLMHR<-GLMHR+ annotate("text", x = -150 , y = -10,label= ("Elevation model"),size = 3)+ annotate("text", x = -150 , y = -19,label= ("Global Mean Rs"),size = 3)+ annotate("text", x = -150 , y = -28,label= expression(paste("1.80"," ",g," ","C"," ", m^-2," ", "day"^-1)),size = 3)
+GLMHR
+
+GLMH1_no_na$Uncertainty <- (GLMH1_no_na$Predicted_Rs-G1_no_na$Predicted_Rs)/G1_no_na$Predicted_Rs
+GLMH_no_na <- GLMH1_no_na[!is.na(GLMH1_no_na$Uncertainty), ]
+
+mean(GLMH1_no_na$Uncertainty,na.rm = T)
+
+my_colormap <- colorRampPalette(rev(brewer.pal(11,'BrBG')))(32)
+GLMHU <- ggplot() + 
+  geom_sf() + 
+  geom_tile(data =GLMH_no_na,aes(Longitude, Latitude, fill = Uncertainty))+
+  scale_fill_gradientn(colours = my_colormap,n.breaks=7,limits=c(-1,1))+labs( "Predicted Rs")+
+  theme(
+        panel.grid=element_blank(), 
+        panel.background=element_blank(),
+        panel.border = element_rect(linetype = "solid", linewidth = 1,fill = NA),
+        #legend.position = c(0.11,0.3)
+        ) 
+#GABCU<-GABCU+ annotate("text", x = -120 , y = -20,label= expression(paste("Global mean Rs"," ","(",g," ","C"," ", m^-2," ", "day"^-1,")")))
+
+GLMHU<-GLMHU + annotate("text", x = -150 , y = -10,label= ("Single global model"),size = 3)+ annotate("text", x = -150 , y = -18,label= ("vs."),size = 3)+ annotate("text", x = -150 , y = -26,label= ("Elevation model"),size = 3)
+GLMHU
+```
+
+
+
+```{r}
+set.seed (556)
+
+modYH <- randomForest(Rs_Norm ~ P_LastMonth   + Measure_Month + #TS + + IGBP
+                         Pm + Tm + Latitude +absLog + Climate_Koeppon + T_LastMonth
+                       + LAI  + Elevation+ IGBP , data=TrainSetYH, 
+                       keep.inbag=TRUE, mtry=5, importance=TRUE, ntree=1000)
+
+
+
+#The summary of the Standard Random Forest model
+modYH
+#Variable impor1tance measures
+importance (modYH)
+#Looking at the OOB error reduction with the tree size
+plot (modYH) 
+#Plotting the variable importance
+varImpPlot(modYH)
+
+
+prediction.vaYH <- predict(modYH, ValidSetYH) #predict w/ validation 
+
+#Compare correlation b/w validation predictions and observations
+cor.test(prediction.vaYH, ValidSetYH$Rs_Norm, method = "pearson", alpha=.05)
+
+VaYH <- cbind(prediction.vaYH, ValidSetYH)
+names(VaYH)[1] <- "Prediction"
+
+valYH <- lm(Rs_Norm~Prediction, data=VaYH)
+summary(valYH)
+
+set.seed (556)
+
+modYQ <- randomForest(Rs_Norm ~  Measure_Month  #+TS  + IGBP
+                      +P_LastMonth   +Pm + Tm + Latitude +absLog + Climate_Koeppon + T_LastMonth
+                       + LAI  + Elevation+ IGBP , data=TrainSetYQ, 
+                       keep.inbag=TRUE, mtry=5, importance=TRUE, ntree=1000)
+
+
+
+#The summary of the Standard Random Forest model
+modYQ
+#Variable impor1tance measures
+importance (modYQ)
+#Looking at the OOB error reduction with the tree size
+plot (modYQ) 
+#Plotting the variable importance
+varImpPlot(modYQ)
+
+
+prediction.vaYQ <- predict(modYQ, ValidSetYQ) #predict w/ validation 
+
+#Compare correlation b/w validation predictions and observations
+cor.test(prediction.vaYQ, ValidSetYQ$Rs_Norm, method = "pearson", alpha=.05)
+
+VaYQ <- cbind(prediction.vaYQ, ValidSetYQ)
+names(VaYQ)[1] <- "Prediction"
+
+valYQ <- lm(Rs_Norm~Prediction, data=VaYQ)
+summary(valYQ)
+
+
+
+
+vaYQH <- rbind(VaYQ, VaYH)
+names(vaYQH)[1] <- "Prediction"
+
+valYQH <- lm(Rs_Norm~Prediction, data=vaYQH)
+summary(valYQH)
+
+cor.test(vaYQH$Prediction, vaYQH$Rs_Norm, method = "spearman", alpha=.05)
+
+mean(vaYQH$Prediction,na.rm = T)
+
+rmse <- sqrt(mean((vaYQH$Prediction - vaYQH$Rs_Norm )^2))
+rmse
+# 计算观测值数量
+n <- length(vaYQH$Rs_Norm)
+
+# 计算每个观测值的差异，并求平方
+diff <- vaYQH$Prediction - vaYQH$Rs_Norm
+squared_diff <- diff^2
+
+# 计算MSE
+mse <- sum(squared_diff) / n
+
+e <- 1-((sum(squared_diff))/sum((vaYQH$Rs_Norm - mean(vaYQH$Rs_Norm))^2))
+e
+# 打印结果
+print(mse)
+
+AIC(val, valYQH)
+
+
+
+#A <- subset(globalData, TopClimate == "A" )
+#B <- subset(globalData, TopClimate == "B" )
+#C <- subset(globalData, TopClimate == "C" )
+#D <- subset(globalData, TopClimate == "D" )
+#E <- subset(globalData, TopClimate == "E" )
+
+#globalData <- globalData[complete.cases(globalData),]
+globalData$prediction <- predict(mod1, globalData)
+
+mean(globalData$prediction,na.rm = T)
+
+globalData$predictionYH <- predict(modYH, globalData)
+
+mean(globalData$predictionYH,na.rm = T)
+
+globalData$predictionYQ <- predict(modYQ, globalData)
+
+mean(globalData$predictionYQ,na.rm = T)
+
+
+
+
+
+#mean(globalData$prediction,na.rm = T)
+#globalData <- globalData[complete.cases(globalData),]
+
+GY7 <- subset(globalData, Measure_Month==7 )
+theme_update(plot.title = element_text(hjust = 0.5))
+
+# 设置色带
+#cols <- c("#FBF8EB", "#F2E49B", "#CAE784", "#1D934D", "#CE6BBB")
+# 在计算分位数之前排除包含缺失值的观测
+GY7_no_na <- GY7[!is.na(GY7 $predictionYQ), ]
+# 定义分位数值，可以根据需要进行调整
+#quantiles <- quantile(G7_no_na$prediction, probs = c(0, 0.25, 0.5, 0.75, 1))
+# 绘图
+
+ggplot(GY7_no_na, aes(Longitude, Latitude, color = predictionYQ)) + 
+  geom_point(size = 0.3) +
+  lims(x = c(-180, 180), y = c(-90, 90)) +
+  labs(color = "RC prediction") +
+  scale_color_viridis_c()+theme(
+        panel.grid=element_blank(), 
+        #panel.background=element_blank()
+        #panel.border = element_rect(linetype = "solid", linewidth = 1,fill = NA))
+  )
+
+G1 <- subset(globalData, Measure_Month==1 )
+G2 <- subset(globalData, Measure_Month==2 )
+G3 <- subset(globalData, Measure_Month==3 )
+G4 <- subset(globalData, Measure_Month==4 )
+G5 <- subset(globalData, Measure_Month==5 )
+G6 <- subset(globalData, Measure_Month==6 )
+G7 <- subset(globalData, Measure_Month==7 )
+G8 <- subset(globalData, Measure_Month==8 )
+G9 <- subset(globalData, Measure_Month==9 )
+G10 <- subset(globalData, Measure_Month==10 )
+G11 <- subset(globalData, Measure_Month==11 )
+G12 <- subset(globalData, Measure_Month==12 )
+
+G1$predictionYH <-(G1$predictionYH+G2$predictionYH+G3$predictionYH+G4$predictionYH+G5$predictionYH+G6$predictionYH+G7$predictionYH+G8$predictionYH+G9$predictionYH+G10$predictionYH+G11$predictionYH)/11#+G12$prediction
+
+
+GG1<-G1
+GG1$Predicted_Rs<-GG1$predictionYH
+
+G1_no_na <- G1[!is.na(G1 $predictionYH), ]
+write.csv(G1_no_na,"G1_no_naY.csv")
+
+GG1_no_na <- GG1[!is.na(GG1 $Predicted_Rs), ]
+
+GC1<-subset(G1_no_na, G1_no_na$predictionYH<=0.5)
+GC2<-subset(G1_no_na, G1_no_na$predictionYH>0.5 & G1_no_na$predictionYH<=1)
+GC3<-subset(G1_no_na, G1_no_na$predictionYH>1 & G1_no_na$predictionYH<=1.4)
+GC4<-subset(G1_no_na, G1_no_na$predictionYH>1.4 & G1_no_na$predictionYH <=1.8)
+GC5<-subset(G1_no_na, G1_no_na$predictionYH>1.8 & G1_no_na$predictionYH <=2.2)
+GC6<-subset(G1_no_na, G1_no_na$predictionYH>2.2 & G1_no_na$predictionYH <=2.6)
+GC7<-subset(G1_no_na, G1_no_na$predictionYH>2.6)
+
+GC<-c(GC1,GC2,GC3,GC4,GC5,GC6,GC7)
+ggplot(G1_no_na, aes(Longitude, Latitude, color = predictionYH)) +
+  scale_colour_steps(low = "white", high = "#006400",n.breaks=7 )+
+  geom_point(size = 0.3) +
+  lims(x = c(-180, 180), y = c(-90, 90)) +
+   labs(color = "Predicted Rs") +
+  theme(
+        panel.grid=element_blank(), 
+        panel.background=element_blank(),
+        panel.border = element_rect(linetype = "solid", linewidth = 1,fill = NA),
+        legend.position = c(0.11,0.3)
+        )
+
+ggplot(G1_no_na, aes(Longitude, Latitude, color = predictionYH)) + 
+  geom_point(size = 0.3) +
+  lims(x = c(-180, 180), y = c(-90, 90)) +
+  labs(color = "RC prediction") +
+  scale_color_viridis_c()+theme(
+        panel.grid=element_blank(), 
+        #panel.background=element_blank()
+        #panel.border = element_rect(linetype = "solid", linewidth = 1,fill = NA))
+  )
+
+
+AIC(val, valYQH,valIABC,valABC,valLMH)
+
+my_colormap <- colorRampPalette(rev(brewer.pal(11,'Spectral')))(32)
+GYHR <- ggplot() + 
+  geom_sf() + 
+  geom_tile(data = GG1_no_na,aes(Longitude, Latitude, fill = Predicted_Rs))+
+  scale_fill_gradientn(colours = my_colormap)+
+  theme(
+        panel.grid=element_blank(), 
+        panel.background=element_blank(),
+        panel.border = element_rect(linetype = "solid", linewidth = 1,fill = NA),
+        #legend.position = c(0.11,0.3)
+        )+labs(colour = "Predicted Rs") 
+GYHR<-GYHR+ annotate("text", x = -150 , y = -10,label= ("Year model"),size = 3)+ annotate("text", x = -150 , y = -19,label= ("Global Mean Rs"),size = 3)+ annotate("text", x = -150 , y = -28,label= expression(paste("1.95"," ",g," ","C"," ", m^-2," ", "day"^-1)),size = 3)
+
+GYHR
+
+GG1$Uncertainty <- (GG1$Predicted_Rs-GG1$prediction)/GG1$prediction
+GG1_no_na <- GG1[!is.na(GG1$Uncertainty), ]
+
+mean(GG1$Uncertainty,na.rm = T)
+
+my_colormap <- colorRampPalette(rev(brewer.pal(9,'BrBG')))(32)
+GYHU <- ggplot() + 
+  geom_sf() + 
+  geom_tile(data =GG1_no_na,aes(Longitude, Latitude, fill = Uncertainty))+
+  scale_fill_gradientn(colours = my_colormap,n.breaks=7,limits=c(-1.5,1.5))+labs( "Predicted Rs")+
+  theme(
+        panel.grid=element_blank(), 
+        panel.background=element_blank(),
+        panel.border = element_rect(linetype = "solid", linewidth = 1,fill = NA),
+        #legend.position = c(0.11,0.3)
+        ) 
+#GABCU<-GABCU+ annotate("text", x = -120 , y = -20,label= expression(paste("Global mean Rs"," ","(",g," ","C"," ", m^-2," ", "day"^-1,")")))
+
+GYHU <- GYHU+ annotate("text", x = -150 , y = -10,label= ("Single global model"),size = 3)+ annotate("text", x = -150 , y = -18,label= ("vs."),size = 3)+ annotate("text", x = -150 , y = -26,label= ("Year model"),size = 3)
+
+GYHU
+
+library(patchwork)
+GABCU/GYHU|GIABCU/GLMHU
+```
+
+```{r}
+library(glmnet)
+x = as.matrix(TrainSetH[,c(4,6,7,16,17,18,19,20,23:39)])
+y = as.matrix(TrainSetH[,2])
+
+set.seed(17) #设置随机种子
+mod = glmnet(x,y,family = 'gaussian',alpha = 1, nlambda = 100)
+print(mod)
+
+#横坐标为着lambda的对数，纵坐标为变量系数
+plot(mod,xvar = 'lambda',label = T) 
+
+set.seed(17)
+cvmod = cv.glmnet(x,y)
+plot(cvmod)
+```
+
+
+```{r}
+# 加载所需的库
+library(randomForest)
+
+# 设置随机种子以确保结果的可重复性
+set.seed(123456789)
+
+# 定义一个函数，用于训练随机森林模型
+train_random_forest <- function(data) {
+  # 设置随机森林参数，这里根据你的需求来调整
+  rf <- randomForest(Rs_Norm ~  Measure_Month  #+TS  + IGBP
+                           +P_LastMonth   +Pm
+                          + Tm + Latitude +absLog + Climate_Koeppon + T_LastMonth
+                       + LAI  + Elevation+ IGBP, data = data, ntree = 200)
+  
+  # 返回训练好的模型
+  return(rf)
+}
+
+# 重复200次引导
+num_bootstrap <- 200
+models <- list()
+
+for (i in 1:num_bootstrap) {
+  # 从原始数据集中进行 Bootstrap 抽样
+  boot_data <- sample(nrow(TrainSet), replace = TRUE)
+  boot_sample <- TrainSet[boot_data, ]
+  
+  # 训练随机森林模型
+  rf_model <- train_random_forest(boot_sample)
+  
+  # 将训练好的模型存储起来
+  models[[i]] <- rf_model
+}
+
+# 对模型进行评估
+# 这里可以根据需要添加你想要的评估指标和分析
+# 例如，你可以计算每个模型的准确率并取平均值和标准差
+accuracies <- sapply(models, function(model) {
+  pred <- predict(model, newdata = ValidSet)
+  #mean(pred == ValidSet$Class)
+})
+
+#accuracies <- rbind(ValidSet, accuracies)
+write.csv(ValidSet,"ValidSet.csv")
+
+
+mean_accuracy <- mean(accuracies)
+sd_accuracy <- sd(accuracies)
+
+# 输出结果
+cat("Mean Accuracy:", mean_accuracy, "\n")
+cat("Standard Deviation of Accuracy:", sd_accuracy, "\n")
+
+RMSE <- list()
+x<-vector(mode="numeric",length=0)
+y<-vector(mode="numeric",length=0)
+Rs_DATA<- read_csv("E:/R/accuracies12.csv",locale=locale(encoding="GBK"))
+Rs_DATA<-as.data.frame(Rs_DATA) 
+class(Rs_DATA)
+for (j in 1:num_bootstrap) {
+  V <- Rs_DATA[,j+2]
+  rmse <- sqrt(mean((Rs_DATA$Rs_Norm - V )^2))
+   x[j] <- rmse
+    R2<- rsq(  Rs_DATA$Rs_Norm,V)
+  y[j] <-  R2
+}  
+x
+y
+mean(x-0.1)
+```
+```{r}
+# 加载所需的库
+library(randomForest)
+
+# 设置随机种子以确保结果的可重复性
+set.seed(123456789)
+
+# 定义一个函数，用于训练随机森林模型
+train_random_forest <- function(data) {
+  # 设置随机森林参数，这里根据你的需求来调整
+  rf <- randomForest(Rs_Norm ~  Measure_Month  #+TS  + IGBP
+                           +P_LastMonth   +Pm
+                          + Tm + Latitude +absLog + Climate_Koeppon + T_LastMonth
+                       + LAI  + Elevation+ IGBP, data = data, ntree = 200)
+  
+  # 返回训练好的模型
+  return(rf)
+}
+
+# 重复200次引导
+num_bootstrap <- 200
+modelsIA <- list()
+
+for (i in 1:num_bootstrap) {
+  # 从原始数据集中进行 Bootstrap 抽样
+  boot_data <- sample(nrow(TrainSetIA), replace = TRUE)
+  boot_sample <- TrainSetIA[boot_data, ]
+  
+  # 训练随机森林模型
+  rf_model <- train_random_forest(boot_sample)
+  
+  # 将训练好的模型存储起来
+  modelsIA[[i]] <- rf_model
+}
+
+# 对模型进行评估
+# 这里可以根据需要添加你想要的评估指标和分析
+# 例如，你可以计算每个模型的准确率并取平均值和标准差
+accuraciesIA <- sapply(modelsIA, function(model) {
+  pred <- predict(model, newdata = ValidSetIA)
+  #mean(pred == ValidSet$Class)
+})
+
+#accuracies <- rbind(ValidSet, accuracies)
+write.csv(ValidSetIA,"ValidSetIA.csv")
+write.csv(accuraciesIA,"accuraciesIA.csv")
+
+mean_accuracyIA <- mean(accuraciesIA)
+sd_accuracyIA <- sd(accuraciesIA)
+
+# 输出结果
+cat("Mean Accuracy:", mean_accuracyIA, "\n")
+cat("Standard Deviation of Accuracy:", sd_accuracyIA, "\n")
+
+modelsIB <- list()
+
+for (i in 1:num_bootstrap) {
+  # 从原始数据集中进行 Bootstrap 抽样
+  boot_data <- sample(nrow(TrainSetIB), replace = TRUE)
+  boot_sample <- TrainSetIB[boot_data, ]
+  
+  # 训练随机森林模型
+  rf_model <- train_random_forest(boot_sample)
+  
+  # 将训练好的模型存储起来
+  modelsIB[[i]] <- rf_model
+}
+
+# 对模型进行评估
+# 这里可以根据需要添加你想要的评估指标和分析
+# 例如，你可以计算每个模型的准确率并取平均值和标准差
+accuraciesIB <- sapply(modelsIB, function(model) {
+  pred <- predict(model, newdata = ValidSetIB)
+  #mean(pred == ValidSet$Class)
+})
+
+#accuracies <- rbind(ValidSet, accuracies)
+write.csv(ValidSetIB,"ValidSetIB.csv")
+write.csv(accuraciesIB,"accuraciesIB.csv")
+
+modelsIC <- list()
+
+for (i in 1:num_bootstrap) {
+  # 从原始数据集中进行 Bootstrap 抽样
+  boot_data <- sample(nrow(TrainSetIC), replace = TRUE)
+  boot_sample <- TrainSetIC[boot_data, ]
+  
+  # 训练随机森林模型
+  rf_model <- train_random_forest(boot_sample)
+  
+  # 将训练好的模型存储起来
+  modelsIC[[i]] <- rf_model
+}
+
+# 对模型进行评估
+# 这里可以根据需要添加你想要的评估指标和分析
+# 例如，你可以计算每个模型的准确率并取平均值和标准差
+accuraciesIC <- sapply(modelsIC, function(model) {
+  pred <- predict(model, newdata = ValidSetIC)
+  #mean(pred == ValidSet$Class)
+})
+
+#accuracies <- rbind(ValidSet, accuracies)
+write.csv(ValidSetIC,"ValidSetIC.csv")
+write.csv(accuraciesIC,"accuraciesIC.csv")
+
+modelsID <- list()
+
+for (i in 1:num_bootstrap) {
+  # 从原始数据集中进行 Bootstrap 抽样
+  boot_data <- sample(nrow(TrainSetID), replace = TRUE)
+  boot_sample <- TrainSetID[boot_data, ]
+  
+  # 训练随机森林模型
+  rf_model <- train_random_forest(boot_sample)
+  
+  # 将训练好的模型存储起来
+  modelsID[[i]] <- rf_model
+}
+
+# 对模型进行评估
+# 这里可以根据需要添加你想要的评估指标和分析
+# 例如，你可以计算每个模型的准确率并取平均值和标准差
+accuraciesID <- sapply(modelsID, function(model) {
+  pred <- predict(model, newdata = ValidSetID)
+  #mean(pred == ValidSet$Class)
+})
+
+#accuracies <- rbind(ValidSet, accuracies)
+write.csv(ValidSetID,"ValidSetID.csv")
+write.csv(accuraciesID,"accuraciesID.csv")
+
+modelsIE <- list()
+
+for (i in 1:num_bootstrap) {
+  # 从原始数据集中进行 Bootstrap 抽样
+  boot_data <- sample(nrow(TrainSetIE), replace = TRUE)
+  boot_sample <- TrainSetIE[boot_data, ]
+  
+  # 训练随机森林模型
+  rf_model <- train_random_forest(boot_sample)
+  
+  # 将训练好的模型存储起来
+  modelsIE[[i]] <- rf_model
+}
+
+# 对模型进行评估
+# 这里可以根据需要添加你想要的评估指标和分析
+# 例如，你可以计算每个模型的准确率并取平均值和标准差
+accuraciesIE <- sapply(modelsIE, function(model) {
+  pred <- predict(model, newdata = ValidSetIE)
+  #mean(pred == ValidSet$Class)
+})
+
+#accuracies <- rbind(ValidSet, accuracies)
+write.csv(ValidSetIE,"ValidSetIE.csv")
+write.csv(accuraciesIE,"accuraciesIE.csv")
+
+
+RMSEI <- list()
+library(mlr3measures)
+xI<-vector(mode="numeric",length=0)
+yI<-vector(mode="numeric",length=0)
+Rs_DATAI<- read_csv("E:/R/IGBP.csv",locale=locale(encoding="GBK"))
+Rs_DATAI<-as.data.frame(Rs_DATAI) 
+#class(Rs_DATAI)
+for (j in 1:num_bootstrap) {
+  VI <- Rs_DATAI[,j+2]
+  rmseI <- sqrt(mean((Rs_DATAI$Rs_Norm - VI )^2))
+   xI[j] <- rmseI
+  #R2I <- sum((Rs_DATAI$Rs_Norm - VI )^2) / sum((Rs_DATAI$Rs_Norm - mean(Rs_DATAI$Rs_Norm))^2)
+   R2I<- rsq( VI, Rs_DATAI$Rs_Norm)
+  yI[j] <-  R2I
+}  
+xI
+yI
+```
+
+
+```{r}
+# 加载所需的库
+library(randomForest)
+
+# 设置随机种子以确保结果的可重复性
+set.seed(123456789)
+
+# 定义一个函数，用于训练随机森林模型
+train_random_forest <- function(data) {
+  # 设置随机森林参数，这里根据你的需求来调整
+  rf <- randomForest(Rs_Norm ~  Measure_Month  #+TS  + IGBP
+                           +P_LastMonth   +Pm
+                          + Tm + Latitude +absLog + Climate_Koeppon + T_LastMonth
+                       + LAI  + Elevation+ IGBP, data = data, ntree = 200)
+  
+  # 返回训练好的模型
+  return(rf)
+}
+
+# 重复200次引导
+num_bootstrap <- 200
+modelsA <- list()
+
+for (i in 1:num_bootstrap) {
+  # 从原始数据集中进行 Bootstrap 抽样
+  boot_data <- sample(nrow(TrainSetA), replace = TRUE)
+  boot_sample <- TrainSetA[boot_data, ]
+  
+  # 训练随机森林模型
+  rf_model <- train_random_forest(boot_sample)
+  
+  # 将训练好的模型存储起来
+  modelsA[[i]] <- rf_model
+}
+
+# 对模型进行评估
+# 这里可以根据需要添加你想要的评估指标和分析
+# 例如，你可以计算每个模型的准确率并取平均值和标准差
+accuraciesA <- sapply(modelsA, function(model) {
+  pred <- predict(model, newdata = ValidSetA)
+  #mean(pred == ValidSet$Class)
+})
+
+#accuracies <- rbind(ValidSet, accuracies)
+write.csv(ValidSetA,"ValidSetA.csv")
+write.csv(accuraciesA,"accuraciesA.csv")
+
+mean_accuracyA <- mean(accuraciesA)
+sd_accuracyA <- sd(accuraciesA)
+
+# 输出结果
+cat("Mean Accuracy:", mean_accuracyA, "\n")
+cat("Standard Deviation of Accuracy:", sd_accuracyA, "\n")
+
+modelsB <- list()
+
+for (i in 1:num_bootstrap) {
+  # 从原始数据集中进行 Bootstrap 抽样
+  boot_data <- sample(nrow(TrainSetB), replace = TRUE)
+  boot_sample <- TrainSetB[boot_data, ]
+  
+  # 训练随机森林模型
+  rf_model <- train_random_forest(boot_sample)
+  
+  # 将训练好的模型存储起来
+  modelsB[[i]] <- rf_model
+}
+
+# 对模型进行评估
+# 这里可以根据需要添加你想要的评估指标和分析
+# 例如，你可以计算每个模型的准确率并取平均值和标准差
+accuraciesB <- sapply(modelsB, function(model) {
+  pred <- predict(model, newdata = ValidSetB)
+  #mean(pred == ValidSet$Class)
+})
+
+#accuracies <- rbind(ValidSet, accuracies)
+write.csv(ValidSetB,"ValidSetB.csv")
+write.csv(accuraciesB,"accuraciesB.csv")
+
+modelsC <- list()
+
+for (i in 1:num_bootstrap) {
+  # 从原始数据集中进行 Bootstrap 抽样
+  boot_data <- sample(nrow(TrainSetC), replace = TRUE)
+  boot_sample <- TrainSetC[boot_data, ]
+  
+  # 训练随机森林模型
+  rf_model <- train_random_forest(boot_sample)
+  
+  # 将训练好的模型存储起来
+  modelsC[[i]] <- rf_model
+}
+
+# 对模型进行评估
+# 这里可以根据需要添加你想要的评估指标和分析
+# 例如，你可以计算每个模型的准确率并取平均值和标准差
+accuraciesC <- sapply(modelsC, function(model) {
+  pred <- predict(model, newdata = ValidSetC)
+  #mean(pred == ValidSet$Class)
+})
+
+#accuracies <- rbind(ValidSet, accuracies)
+write.csv(ValidSetC,"ValidSetC.csv")
+write.csv(accuraciesC,"accuraciesC.csv")
+
+modelsD <- list()
+
+for (i in 1:num_bootstrap) {
+  # 从原始数据集中进行 Bootstrap 抽样
+  boot_data <- sample(nrow(TrainSetD), replace = TRUE)
+  boot_sample <- TrainSetD[boot_data, ]
+  
+  # 训练随机森林模型
+  rf_model <- train_random_forest(boot_sample)
+  
+  # 将训练好的模型存储起来
+  modelsD[[i]] <- rf_model
+}
+
+# 对模型进行评估
+# 这里可以根据需要添加你想要的评估指标和分析
+# 例如，你可以计算每个模型的准确率并取平均值和标准差
+accuraciesD <- sapply(modelsD, function(model) {
+  pred <- predict(model, newdata = ValidSetD)
+  #mean(pred == ValidSet$Class)
+})
+
+#accuracies <- rbind(ValidSet, accuracies)
+write.csv(ValidSetD,"ValidSetD.csv")
+write.csv(accuraciesD,"accuraciesD.csv")
+
+modelsE <- list()
+
+for (i in 1:num_bootstrap) {
+  # 从原始数据集中进行 Bootstrap 抽样
+  boot_data <- sample(nrow(TrainSetE), replace = TRUE)
+  boot_sample <- TrainSetE[boot_data, ]
+  
+  # 训练随机森林模型
+  rf_model <- train_random_forest(boot_sample)
+  
+  # 将训练好的模型存储起来
+  modelsE[[i]] <- rf_model
+}
+
+# 对模型进行评估
+# 这里可以根据需要添加你想要的评估指标和分析
+# 例如，你可以计算每个模型的准确率并取平均值和标准差
+accuraciesE <- sapply(modelsE, function(model) {
+  pred <- predict(model, newdata = ValidSetE)
+  #mean(pred == ValidSet$Class)
+})
+
+#accuracies <- rbind(ValidSet, accuracies)
+write.csv(ValidSetE,"ValidSetE.csv")
+write.csv(accuraciesE,"accuraciesE.csv")
+
+
+RMSEI <- list()
+library(mlr3measures)
+xA<-vector(mode="numeric",length=0)
+yA<-vector(mode="numeric",length=0)
+Rs_DATAA<- read_csv("E:/R/ABCDE.csv",locale=locale(encoding="GBK"))
+Rs_DATAA<-as.data.frame(Rs_DATAA) 
+#class(Rs_DATAI)
+for (j in 1:num_bootstrap) {
+  VA <- Rs_DATAA[,j+2]
+  rmseA <- sqrt(mean((Rs_DATAA$Rs_Norm - VA )^2))
+   xA[j] <- rmseA
+  #R2I <- sum((Rs_DATAI$Rs_Norm - VI )^2) / sum((Rs_DATAI$Rs_Norm - mean(Rs_DATAI$Rs_Norm))^2)
+   R2A<- rsq( Rs_DATAA$Rs_Norm, VA)
+  yA[j] <-  R2A
+}  
+xA
+yA
+```
+
+
+```{r}
+# 加载所需的库
+library(randomForest)
+
+# 设置随机种子以确保结果的可重复性
+set.seed(123456789)
+
+# 定义一个函数，用于训练随机森林模型
+train_random_forest <- function(data) {
+  # 设置随机森林参数，这里根据你的需求来调整
+  rf <- randomForest(Rs_Norm ~  Measure_Month  #+TS  + IGBP
+                           +P_LastMonth   +Pm
+                          + Tm + Latitude +absLog + Climate_Koeppon + T_LastMonth
+                       + LAI  + Elevation+ IGBP, data = data, ntree = 200)
+  
+  # 返回训练好的模型
+  return(rf)
+}
+
+# 重复200次引导
+num_bootstrap <- 200
+modelsY <- list()
+
+for (i in 1:num_bootstrap) {
+  # 从原始数据集中进行 Bootstrap 抽样
+  boot_data <- sample(nrow(TrainSetYH), replace = TRUE)
+  boot_sample <- TrainSetYH[boot_data, ]
+  
+  # 训练随机森林模型
+  rf_model <- train_random_forest(boot_sample)
+  
+  # 将训练好的模型存储起来
+  modelsY[[i]] <- rf_model
+}
+
+# 对模型进行评估
+# 这里可以根据需要添加你想要的评估指标和分析
+# 例如，你可以计算每个模型的准确率并取平均值和标准差
+accuraciesY <- sapply(modelsY, function(model) {
+  pred <- predict(model, newdata = ValidSetYH)
+  #mean(pred == ValidSet$Class)
+})
+
+#accuracies <- rbind(ValidSet, accuracies)
+write.csv(ValidSetYH,"ValidSetY.csv")
+write.csv(accuraciesY,"accuraciesY.csv")
+
+mean_accuracyY <- mean(accuraciesY)
+sd_accuracyY <- sd(accuraciesY)
+
+# 输出结果
+cat("Mean Accuracy:", mean_accuracyY, "\n")
+cat("Standard Deviation of Accuracy:", sd_accuracyY, "\n")
+
+RMSEI <- list()
+library(mlr3measures)
+xY<-vector(mode="numeric",length=0)
+yY<-vector(mode="numeric",length=0)
+Rs_DATAY<- read_csv("E:/R/accuraciesY.csv",locale=locale(encoding="GBK"))
+Rs_DATAY<-as.data.frame(Rs_DATAY) 
+#class(Rs_DATAI)
+for (j in 1:num_bootstrap) {
+  VY <- Rs_DATAY[,j+2]
+  rmseY <- sqrt(mean((Rs_DATAY$Rs_Norm - VY )^2))
+   xY[j] <- rmseY
+  #R2I <- sum((Rs_DATAI$Rs_Norm - VI )^2) / sum((Rs_DATAI$Rs_Norm - mean(Rs_DATAI$Rs_Norm))^2)
+   R2Y<- rsq( Rs_DATAY$Rs_Norm, VY)
+  yY[j] <-  R2Y
+}  
+xY
+yY
+```
+
+
+```{r}
+# 加载所需的库
+library(randomForest)
+
+# 设置随机种子以确保结果的可重复性
+set.seed(123456789)
+
+# 定义一个函数，用于训练随机森林模型
+train_random_forest <- function(data) {
+  # 设置随机森林参数，这里根据你的需求来调整
+  rf <- randomForest(Rs_Norm ~  Measure_Month  #+TS  + IGBP
+                           +P_LastMonth   +Pm
+                          + Tm + Latitude +absLog + Climate_Koeppon + T_LastMonth
+                       + LAI  + Elevation+ IGBP, data = data, ntree = 200)
+  
+  # 返回训练好的模型
+  return(rf)
+}
+
+# 重复200次引导
+num_bootstrap <- 200
+modelsL <- list()
+
+for (i in 1:num_bootstrap) {
+  # 从原始数据集中进行 Bootstrap 抽样
+  boot_data <- sample(nrow(TrainSetL), replace = TRUE)
+  boot_sample <- TrainSetL[boot_data, ]
+  
+  # 训练随机森林模型
+  rf_model <- train_random_forest(boot_sample)
+  
+  # 将训练好的模型存储起来
+  modelsL[[i]] <- rf_model
+}
+
+# 对模型进行评估
+# 这里可以根据需要添加你想要的评估指标和分析
+# 例如，你可以计算每个模型的准确率并取平均值和标准差
+accuraciesL <- sapply(modelsL, function(model) {
+  pred <- predict(model, newdata = ValidSetL)
+  #mean(pred == ValidSet$Class)
+})
+
+#accuracies <- rbind(ValidSet, accuracies)
+write.csv(ValidSetL,"ValidSetL.csv")
+write.csv(accuraciesL,"accuraciesL.csv")
+
+mean_accuracyL <- mean(accuraciesL)
+sd_accuracyL <- sd(accuraciesL)
+
+# 输出结果
+cat("Mean Accuracy:", mean_accuracyL, "\n")
+cat("Standard Deviation of Accuracy:", sd_accuracyL, "\n")
+
+modelsM <- list()
+
+for (i in 1:num_bootstrap) {
+  # 从原始数据集中进行 Bootstrap 抽样
+  boot_data <- sample(nrow(TrainSetM), replace = TRUE)
+  boot_sample <- TrainSetM[boot_data, ]
+  
+  # 训练随机森林模型
+  rf_model <- train_random_forest(boot_sample)
+  
+  # 将训练好的模型存储起来
+  modelsM[[i]] <- rf_model
+}
+
+# 对模型进行评估
+# 这里可以根据需要添加你想要的评估指标和分析
+# 例如，你可以计算每个模型的准确率并取平均值和标准差
+accuraciesM <- sapply(modelsM, function(model) {
+  pred <- predict(model, newdata = ValidSetM)
+  #mean(pred == ValidSet$Class)
+})
+
+#accuracies <- rbind(ValidSet, accuracies)
+write.csv(ValidSetM,"ValidSetM.csv")
+write.csv(accuraciesM,"accuraciesM.csv")
+
+modelsH <- list()
+
+for (i in 1:num_bootstrap) {
+  # 从原始数据集中进行 Bootstrap 抽样
+  boot_data <- sample(nrow(TrainSetH), replace = TRUE)
+  boot_sample <- TrainSetH[boot_data, ]
+  
+  # 训练随机森林模型
+  rf_model <- train_random_forest(boot_sample)
+  
+  # 将训练好的模型存储起来
+  modelsH[[i]] <- rf_model
+}
+
+# 对模型进行评估
+# 这里可以根据需要添加你想要的评估指标和分析
+# 例如，你可以计算每个模型的准确率并取平均值和标准差
+accuraciesH <- sapply(modelsH, function(model) {
+  pred <- predict(model, newdata = ValidSetH)
+  #mean(pred == ValidSet$Class)
+})
+
+#accuracies <- rbind(ValidSet, accuracies)
+write.csv(ValidSetH,"ValidSetH.csv")
+write.csv(accuraciesH,"accuraciesH.csv")
+
+RMSEI <- list()
+library(mlr3measures)
+xL<-vector(mode="numeric",length=0)
+yL<-vector(mode="numeric",length=0)
+Rs_DATAL<- read_csv("E:/R/LMH.csv",locale=locale(encoding="GBK"))
+Rs_DATAL<-as.data.frame(Rs_DATAL) 
+#class(Rs_DATAI)
+for (j in 1:num_bootstrap) {
+  VL <- Rs_DATAL[,j+2]
+  rmseL <- sqrt(mean((Rs_DATAL$Rs_Norm - VL )^2))
+   xL[j] <- rmseL
+  #R2I <- sum((Rs_DATAI$Rs_Norm - VI )^2) / sum((Rs_DATAI$Rs_Norm - mean(Rs_DATAI$Rs_Norm))^2)
+   R2L<- rsq( Rs_DATAL$Rs_Norm, VL)
+  yL[j] <-  R2L
+}  
+xL
+yL
+XX<-cbind(x,xA,xI,xY,xL)
+yy<-cbind(y,yA,yI,yY,yL)
+write.csv(XX,"XX.csv")
+write.csv(yy,"yy.csv")
+```
+
+```{r}
+library(caret)  # 载入caret包
+
+# 假设您的数据框是df，包含日期列和其他特征列
+df<- RsForRandomForest_naOMIT  # 提取月份信息
+df$month<-df$Measure_Month
+months <- unique(df$month)
+
+results <- list()
+
+for (m in months) {
+  train_data <- df[df$month != m, ]
+  test_data  <- df[df$month == m, ]
+  
+  # 训练模型
+ # fit <- train(Rs_Norm ~ P_LastMonth   + Measure_Month + #TS + 
+  #                       Pm + Tm +Latitude  +absLog #+absLat#
+  #                       #+Longitude 
+  #                       + Climate_Koeppon  + IGBP + T_LastMonth
+  #                       + LAI  + Elevation , data = train_data, method = "randomForest")
+  
+   fit <- randomForest(Rs_Norm ~ P_LastMonth   + Measure_Month + #TS + 
+                         Pm + Tm +Latitude  +absLog #+absLat#
+                         #+Longitude 
+                         + Climate_Koeppon  + IGBP + T_LastMonth
+                         + LAI  + Elevation , data=train_data, 
+                       keep.inbag=TRUE, mtry=5, importance=TRUE, ntree=200)
+  # 预测
+  predictions <- predict(fit, test_data)
+  
+  # 存储结果
+  results[[m]] <- postResample(predictions, test_data$Rs_Norm)
+}
+
+# 查看结果
+results
+write.csv(results,"results.csv")
+```
+
+
+```{r}
+
+library(caret)  # 载入caret包
+
+# 假设您的数据框是df，包含日期列和其他特征列
+df<- TrainSetH # 提取月份信息
+df$month<-df$Measure_Month
+months <- unique(df$month)
+
+resultsH <- list()
+
+for (m in months) {
+  train_data <- df[df$month != m, ]
+  test_data  <- df[df$month == m, ]
+  
+  # 训练模型
+ # fit <- train(Rs_Norm ~ P_LastMonth   + Measure_Month + #TS + 
+  #                       Pm + Tm +Latitude  +absLog #+absLat#
+  #                       #+Longitude 
+  #                       + Climate_Koeppon  + IGBP + T_LastMonth
+  #                       + LAI  + Elevation , data = train_data, method = "randomForest")
+  
+   fit <- randomForest(Rs_Norm ~ P_LastMonth   + Measure_Month + #TS + 
+                         Pm + Tm +Latitude  +absLog #+absLat#
+                         #+Longitude 
+                         + Climate_Koeppon  + IGBP + T_LastMonth
+                         + LAI  + Elevation , data=train_data, 
+                       keep.inbag=TRUE, mtry=5, importance=TRUE, ntree=200)
+  # 预测
+  predictions <- predict(fit, test_data)
+  
+  # 存储结果
+  resultsH[[m]] <- postResample(predictions, test_data$Rs_Norm)
+}
+
+# 查看结果
+resultsH
+write.csv(resultsH,"resultsH.csv")
+```
+
+
+
+```{r}
+df<- RsForRandomForest_naOMIT 
+df$site <- df$studynumber
+sites <- unique(df$site)
+
+resultss <- list()
+
+for (s in sites) {
+  train_data <- df[df$site != s, ]
+  test_data  <- df[df$site == s, ]
+  
+  # 训练模型
+  fit <- randomForest(Rs_Norm ~ P_LastMonth   + Measure_Month + #TS + 
+                         Pm + Tm +Latitude  +absLog #+absLat#
+                         #+Longitude 
+                         + Climate_Koeppon  + IGBP + T_LastMonth
+                         + LAI  + Elevation , data=train_data, 
+                       keep.inbag=TRUE, mtry=5, importance=TRUE, ntree=200)
+  
+  # 预测
+  predictions <- predict(fit, test_data)
+  
+  # 存储结果
+  resultss[[s]] <- postResample(predictions, test_data$Rs_Norm)
+}
+
+# 查看结果
+resultss
+#resultsss <- na.omit(resultss)
+write.csv(resultsss,"resultsss.csv")
+
+
+remove_empty_list_elements <- function(lst) {
+  lst <- lst[sapply(lst, function(x) !is.null(x) && length(x) > 0)]
+  return(lst)
+}
+ 
+# 示例列表
+example_list <- resultss
+ 
+# 删除空行
+cleaned_list <- remove_empty_list_elements(example_list)
+write.csv(cleaned_list,"cleaned_lists.csv")
+
+```
+
